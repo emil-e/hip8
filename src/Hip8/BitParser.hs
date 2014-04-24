@@ -11,7 +11,9 @@ module Hip8.BitParser (
   runParser,
   failParse,
   peekBits,
+  skipBits,
   getBits,
+  getBitsLeft,
   assertEqBits
   ) where
 
@@ -30,16 +32,17 @@ type BitParser w a = StateT (ParserState w) Maybe a
 
 -- |Masks the higher bits while retaining the @n@ lower bits.
 maskBits :: (Bits a) => Int -> a -> a
-maskBits n x | n == bitSize x = x
-             | otherwise = maskBits (n + 1) $ clearBit x n
+maskBits 0 x = complement x .&. x
+maskBits n x = x .&. shiftR (complement x .|. x) (bitSize x - n)
+  where 
 
 -- |Runs the given parser with the specified data
 runParser
-  :: BitParser w a -- ^The parser to run
-  -> Int           -- ^The number of bits remaining in the data
+  :: Int           -- ^The number of bits remaining in the data
   -> w             -- ^The data
+  -> BitParser w a -- ^The parser to run
   -> Maybe a       -- ^The parsed value or 'Nothing' on failure
-runParser parser nbits bits = fst <$> runStateT parser (ParserState nbits bits)
+runParser nbits bits parser = fst <$> runStateT parser (ParserState nbits bits)
 
 -- |Failes the parsing
 failParse :: BitParser w a
@@ -50,12 +53,13 @@ peekBits :: (Bits w) => Int -> BitParser w w
 peekBits n = do
   (ParserState nbits bits) <- get
   when (n > nbits) failParse
-  return $ maskBits n $ shiftL bits (nbits - n)
+  return $ maskBits n $ shiftR bits (nbits - n)
 
 -- |Skips @n@ number of bits.
 skipBits :: Int -> BitParser w ()
 skipBits n = do
   (ParserState nbits bits) <- get
+  when (n > nbits) failParse
   put $ ParserState (nbits - n) bits
 
 -- |Gets @n@ number of bits from the remaining data without consuming them.
@@ -64,6 +68,10 @@ getBits n = do
   ret <- peekBits n
   skipBits n
   return ret
+
+-- |Gets the number of bits left of the remaining data.
+getBitsLeft :: BitParser w Int
+getBitsLeft = get >>= \(ParserState nbits _) -> return nbits
 
 -- |Reads the next @n@ bits and checks that they are equal to the given value. If not, the parser
 -- fails.
