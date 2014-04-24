@@ -7,6 +7,7 @@ Parser for parsing bitfields from words
 -}
 
 module Hip8.BitParser (
+  BitParser,
   maskBits,
   runParser,
   failParse,
