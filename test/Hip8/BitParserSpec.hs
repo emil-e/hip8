@@ -80,3 +80,13 @@ spec = do
     prop "succeds on equality" $
       forAll (bitRange `suchThat` even) $ \n ->
         runParser 32 (zebra :: Word32) (assertEqBits n (maskBits n zebra)) == Just ()
+
+  describe "<|>" $ do
+    it "fails if both parsers fail" $
+      runParser 32 (0 :: Word32) (failParse <|> failParse) `shouldBe` (Nothing :: Maybe ())
+    
+    prop "always uses left if right fails" $
+      \x -> runParser 32 (x :: Word32) (getBits 32 <|> failParse) == Just x
+
+    prop "always uses right if left fails" $
+      \x -> runParser 32 (x :: Word32) (failParse <|> getBits 32) == Just x
