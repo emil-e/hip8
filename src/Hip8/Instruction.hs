@@ -60,9 +60,22 @@ binToString word = fromMaybe "" (showInstruction <$> parseInstruction word)
 parseInstruction :: Word16 -> Maybe Instruction
 parseInstruction word =
   runParser 16 word 
-     $  assertEqBits 16 0x00E0 *> pure cls 
-    <|> assertEqBits 16 0x00EE *> pure ret 
-    <|> assertEqBits 4 0x0 *> (sys <$> getBits 12)
+     $  const16 0x00E0 *> pure cls 
+    <|> const16 0x00EE *> pure ret 
+    <|> const4 0x0 *> (sys <$> addr)
+    <|> const4 0x1 *> (jp <$> addr)
+    <|> const4 0x2 *> (call <$> addr)
+    <|> const4 0x3 *> (se <$> reg <*> byte)
+    <|> const4 0x4 *> (sne <$> reg <*> byte)
+    <|> const4 0x5 *> (ser <$> reg <*> reg) <* const4 0x0
+    <|> const4 0x6 *> (ld <$> reg <*> byte)
+    <|> const4 0x7 *> (add <$> reg <*> byte)
+  where const4 = assertEqBits 4
+        const8 = assertEqBits 8
+        const16 = assertEqBits 16
+        addr = getBits 12
+        reg = getBits 4
+        byte = getBits 8
 
 sys :: Word16 -> Instruction
 sys loc = Instruction (InstructionInfo "SYS" [loc]) exec
@@ -74,4 +87,32 @@ cls = Instruction (InstructionInfo "CLS" []) exec
 
 ret :: Instruction
 ret = Instruction (InstructionInfo "RET" []) exec
+  where exec = undefined
+
+jp :: Word16 -> Instruction
+jp loc = Instruction (InstructionInfo "JP" [loc]) exec
+  where exec = undefined
+  
+call :: Word16 -> Instruction
+call loc = Instruction (InstructionInfo "CALL" [loc]) exec
+  where exec = undefined
+  
+se :: Word16 -> Word16 -> Instruction
+se reg byte = Instruction (InstructionInfo "SE" [reg, byte]) exec
+  where exec = undefined
+  
+sne :: Word16 -> Word16 -> Instruction
+sne reg byte = Instruction (InstructionInfo "SNE" [reg, byte]) exec
+  where exec = undefined
+
+ser :: Word16 -> Word16 -> Instruction
+ser reg1 reg2 = Instruction (InstructionInfo "SER" [reg1, reg2]) exec
+  where exec = undefined
+  
+ld :: Word16 -> Word16 -> Instruction
+ld reg byte = Instruction (InstructionInfo "LD" [reg, byte]) exec
+  where exec = undefined
+
+add :: Word16 -> Word16 -> Instruction
+add reg byte = Instruction (InstructionInfo "ADD" [reg, byte]) exec
   where exec = undefined
