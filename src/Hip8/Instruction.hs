@@ -67,7 +67,7 @@ parseInstruction word =
     <|> const4 0x2 *> (call <$> addr)
     <|> const4 0x3 *> (se <$> reg <*> byte)
     <|> const4 0x4 *> (sne <$> reg <*> byte)
-    <|> const4 0x5 *> (ser <$> reg <*> reg) <* const4 0x0
+    <|> const4 0x5 *> (sev <$> reg <*> reg) <* const4 0x0
     <|> const4 0x6 *> (ld <$> reg <*> byte)
     <|> const4 0x7 *> (add <$> reg <*> byte)
   where const4 = assertEqBits 4
@@ -105,8 +105,8 @@ sne :: Word16 -> Word16 -> Instruction
 sne reg byte = Instruction (InstructionInfo "SNE" [reg, byte]) exec
   where exec = undefined
 
-ser :: Word16 -> Word16 -> Instruction
-ser reg1 reg2 = Instruction (InstructionInfo "SER" [reg1, reg2]) exec
+sev :: Word16 -> Word16 -> Instruction
+sev reg1 reg2 = Instruction (InstructionInfo "SEV" [reg1, reg2]) exec
   where exec = undefined
   
 ld :: Word16 -> Word16 -> Instruction
@@ -115,4 +115,20 @@ ld reg byte = Instruction (InstructionInfo "LD" [reg, byte]) exec
 
 add :: Word16 -> Word16 -> Instruction
 add reg byte = Instruction (InstructionInfo "ADD" [reg, byte]) exec
+  where exec = undefined
+  
+ldv :: Word16 -> Word16 -> Instruction
+ldv dest src = Instruction (InstructionInfo "LDV" [dest, src]) exec
+  where exec = undefined
+  
+or :: Word16 -> Word16 -> Instruction
+or reg1 reg2 = Instruction (InstructionInfo "OR" [reg1, reg2]) exec
+  where exec = undefined
+
+and :: Word16 -> Word16 -> Instruction
+and reg1 reg2 = Instruction (InstructionInfo "AND" [reg1, reg2]) exec
+  where exec = undefined
+
+xor :: Word16 -> Word16 -> Instruction
+xor reg1 reg2 = Instruction (InstructionInfo "XOR" [reg1, reg2]) exec
   where exec = undefined
