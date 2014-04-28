@@ -6,9 +6,6 @@ Instructions and instruction parsing
 -}
 
 module Hip8.Instruction (
-  Environment,
-  SystemState,
-  SystemTransformer,
   InstructionInfo(..),
   Instruction(..),
   parseInstruction,
@@ -50,20 +47,9 @@ module Hip8.Instruction (
   ) where
 
 import Hip8.BitParser
+import Hip8.System
 import Control.Applicative
 import Data.Word
-
--- |The input environment for the emulation
-type Environment = ()
-
--- |The state of the system
-type SystemState = ()
-
--- |Indicates an exception in the CPU with an associated description.
-newtype CpuException = CpuException String
-
--- |Function which transforms the state of the system given an environment.
-type SystemTransformer = Environment -> SystemState -> Either CpuException SystemState
 
 -- |A pseudo-argument to an instruction.
 data PseudoArg = Addr Word16
@@ -85,7 +71,7 @@ data InstructionInfo = InstructionInfo String [PseudoArg]
 
 -- |An instruction with a describing string and a 'SystemTransformer' which performs
 -- the operation described by the info.
-data Instruction = Instruction InstructionInfo SystemTransformer
+data Instruction = Instruction InstructionInfo (System ())
 
 instance Show Instruction where
   show (Instruction info _) = show info
@@ -141,7 +127,7 @@ parseInstruction word =
 
 sys :: Word16 -> Instruction
 sys addr = Instruction (InstructionInfo "SYS" [Addr addr]) exec
-  where exec _ _ = Left $ CpuException "SYS instruction is not allowed"
+  where exec = systemException "SYS instruction is not allowed"
 
 cls :: Instruction
 cls = Instruction (InstructionInfo "CLS" []) exec

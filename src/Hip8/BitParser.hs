@@ -44,11 +44,10 @@ maskBits n x = x .&. shiftR (complement x .|. x) (bitSize x - n)
   where 
 
 -- |Runs the given parser with the specified data
-runParser
-  :: Int           -- ^The number of bits remaining in the data
-  -> w             -- ^The data
-  -> BitParser w a -- ^The parser to run
-  -> Maybe a       -- ^The parsed value or 'Nothing' on failure
+runParser :: Int           -- ^The number of bits remaining in the data
+          -> w             -- ^The data
+          -> BitParser w a -- ^The parser to run
+          -> Maybe a       -- ^The parsed value or 'Nothing' on failure
 runParser nbits bits (BitParser parser) = evalStateT parser (ParserState nbits bits)
 
 -- |Returns the state of the parser.
