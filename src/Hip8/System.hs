@@ -46,7 +46,7 @@ import Text.Printf
 
 -- |Describes the input to the emulated system consisting of the current time
 -- and the currently pressed key.
-data Environment = Environment Float Word8
+data Environment = Environment Float (Maybe Word8)
                  deriving (Eq, Show)
 
 -- |Describes a value set at a particular time for the sound timer or delay timer.
