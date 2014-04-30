@@ -17,7 +17,9 @@ module Hip8.Generators (
   writableArea,
   readOnlyArea,
   invalidArea,
-  validPC
+  validPC,
+  validRegisterIndex,
+  invalidRegisterIndex
   ) where
 
 import Test.QuickCheck.Gen
@@ -47,7 +49,7 @@ instance Arbitrary Environment where
 instance Arbitrary SystemState where
   arbitrary = do
     mem <- dataVector $ fromIntegral (memorySize - userMemoryStart)
-    reg <- vector numRegisters
+    reg <- vector $ fromIntegral numRegisters
     regi <- readableAddress
     stack <- listOf validPC
     pc <- validPC
@@ -115,3 +117,11 @@ invalidArea = oneof [invalidStart, invalidEnd]
 -- |Generates a valid program counter.
 validPC :: Gen Word16
 validPC = readableAddress `suchThat` even
+
+-- |Generates a valid register index.
+validRegisterIndex :: Gen Word8
+validRegisterIndex = choose (0, numRegisters - 1)
+
+-- |Generates an invalid register index.
+invalidRegisterIndex :: Gen Word8
+invalidRegisterIndex = arbitrary `suchThat` (>= numRegisters)

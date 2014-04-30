@@ -27,8 +27,11 @@ module Hip8.System (
   writeMem,
   readMem,
   setReg,
+  getReg,
   setRegI,
+  getRegI,
   setPC,
+  getPC,
   push,
   pop
   ) where
@@ -73,7 +76,7 @@ memorySize :: Word16
 memorySize = 4096
 
 -- |The number of standard registers in the Chip-8 system
-numRegisters :: Int
+numRegisters :: Word8
 numRegisters = 16
 
 -- |The start of the memory available for programs
@@ -84,7 +87,7 @@ userMemoryStart = 0x200
 initialSystemState :: SystemState
 initialSystemState = SystemState {
   mainMemory = Vector.replicate (fromIntegral memorySize) 0,
-  registers = Vector.replicate numRegisters 0,
+  registers = Vector.replicate (fromIntegral numRegisters) 0,
   registerI = 0,
   stack = [],
   programCounter = userMemoryStart,
@@ -197,30 +200,51 @@ readMem :: Word16 -- ^The start address
 readMem addr len = do
   let endAddr = addr + len
   unless (endAddr <= memorySize) $
-    systemException (printf "Read ends on invalid memory address: 0x%X" endAddr)
+    systemException (printf "Read ends on invalid memory address 0x%X" endAddr)
     
   st <- getSystemState
   return $ Vector.slice (fromIntegral addr) (fromIntegral len) (mainMemory st)
 
 -- |Sets the value of the registry with the given index.
-setReg :: Int   -- ^The registry index
+setReg :: Word8   -- ^The registry index
        -> Word8 -- ^The value
        -> System ()
 setReg index value = do
   unless (index < numRegisters) $
-    systemException ("Invalid register index: " ++ show index)
+    systemException (printf "Write to invalid register 0x%X" index)
   modifySystemState $ \st ->
-    st { registers = Vector.modify (\v -> MVector.write v index value) (registers st) }
+    st { registers = Vector.modify
+                       (\v -> MVector.write v (fromIntegral index) value)
+                       (registers st) }
+
+-- |Returns the value of the registry with the given index.
+getReg :: Word8 -> System Word8
+getReg index = do
+  unless (index < numRegisters) $
+    systemException (printf "Read from invalid register 0x%X" index)
+  st <- getSystemState
+  return $ registers st Vector.! fromIntegral index
 
 -- |Sets the value of the I register.
 setRegI :: Word16 -> System ()
 setRegI value = modifySystemState $ \st -> st { registerI = value }
 
+-- |Returns the value of the I register.
+getRegI :: System Word16
+getRegI = registerI <$> getSystemState
+
 -- |Sets the program counter. Must be even.
 setPC :: Word16 -> System ()
 setPC value = do
-  unless (even value) $ systemException (printf "Invalid program counter: 0x%X" value)
+  unless (even value) $
+    systemException (printf "Address 0x%X is not even and thus not a valid PC" value)
+  unless (value < memorySize) $
+    systemException (printf "Invalid address 0x%X" value)
   modifySystemState $ \st ->  st { programCounter = value }
+
+-- |Returns the program counter.
+getPC :: System Word16
+getPC = programCounter <$> getSystemState
 
 -- |Pushes the given address onto the stack.
 push :: Word16 -> System ()
@@ -235,3 +259,4 @@ pop = do
   let (ret:newStack) = stk
   putSystemState $ st { stack = newStack }
   return ret
+

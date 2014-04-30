@@ -9,9 +9,11 @@ import qualified Data.Vector.Generic as Vector
 import Control.Applicative
 import Control.Monad
 
-isError :: Either a b -> Bool
-isError (Left _) = True
-isError (Right _) = False
+isError :: System a -> Environment -> SystemState -> Bool
+isError sys env state =
+  case evalSystem env state sys of
+    Left _  -> True
+    Right _ -> False
 
 isNonMutating :: System a -> Environment -> SystemState -> Bool
 isNonMutating sys env state = Right state == execSystem env state sys
@@ -24,11 +26,10 @@ spec = do
         evalSystem env state (setMem addr x >> getMem addr) == Right x
 
     prop "fails for invalid memory addresses" $
-      forAll invalidAddress $ \addr env state ->
-        isError $ evalSystem env state (getMem addr)
+      forAll invalidAddress $ \addr -> isError $ getMem addr
 
     prop "does not mutate the state" $
-      forAll readableAddress $ \addr -> isNonMutating (getMem addr)
+      forAll readableAddress $ \addr -> isNonMutating $ getMem addr
 
   describe "setMem" $ do
     prop "only changes the given address" $
@@ -37,15 +38,11 @@ spec = do
         setMem addr x
         setMem addr old
 
-    let shouldFailForAddress addrGen =
-          forAll addrGen $ \addr x env state ->
-            isError $ evalSystem env state (setMem addr x)
-
     prop "fails for invalid memoryAddresses" $
-      shouldFailForAddress invalidAddress
+      forAll invalidAddress $ \addr x -> isError $ setMem addr x
 
     prop "fails for read-only memoryAddresses" $
-      shouldFailForAddress readOnlyAddress
+      forAll readOnlyAddress $ \addr x -> isError $ setMem addr x
 
   describe "readMem" $ do
     prop "is equivalent to reading byte by byte" $
@@ -56,8 +53,7 @@ spec = do
         in bulk == oneByOne
 
     prop "fails for invalid ranges" $
-      forAll invalidArea $ \(addr, len) env state ->
-        isError $ evalSystem env state (readMem addr len)
+      forAll invalidArea $ \(addr, len) -> isError $ readMem addr len
 
     prop "read length is equal to requested length" $
       forAll readableArea $ \(addr, len) env state ->
@@ -90,12 +86,82 @@ spec = do
         isNonMutating $ writeMem addr Vector.empty
     
     let shouldFailForArea area =
-          forAll area $ \(addr, len) env state ->
+          forAll area $ \(addr, len) ->
           forAll (dataVector $ fromIntegral len) $ \vec ->
-            isError $ evalSystem env state (writeMem addr vec)
+            isError $ writeMem addr vec
     
     prop "fails for invalid ranges" $
       shouldFailForArea invalidArea
 
-    prop "fails for invalid ranges" $
+    prop "fails for read-only ranges" $
       shouldFailForArea readOnlyArea
+
+  describe "getReg" $ do
+    prop "fails for invalid register indexes" $
+      forAll invalidRegisterIndex $ \index -> isError $ getReg index
+
+    prop "does not mutate the state" $
+      forAll validRegisterIndex $ \index -> isNonMutating (getReg index)
+
+  describe "setReg" $ do
+    prop "fails for invalid register indexes" $
+      forAll invalidRegisterIndex $ \index x -> isError $ setReg index x
+
+    prop "getReg returns what was written" $
+      forAll validRegisterIndex $ \index x env state ->
+        evalSystem env state (setReg index x >> getReg index) == Right x
+
+    prop "only changes the given index" $
+      forAll validRegisterIndex $ \index x ->
+        isNonMutating $ do
+          old <- getReg index
+          setReg index x
+          setReg index old
+
+  describe "getRegI" $
+    prop "does not mutate the state" $
+      isNonMutating getRegI
+
+  describe "setRegI" $ do
+    prop "getRegI returns what was set" $
+      \x env state -> evalSystem env state (setRegI x >> getRegI) == Right x
+
+    prop "only changes the program I register" $
+      \x -> isNonMutating $ do
+        old <- getRegI
+        setRegI x
+        setRegI old
+
+  describe "getPC" $
+    prop "does not mutate the state" $
+      isNonMutating getPC
+
+  describe "setPC" $ do
+    prop "fails for odd addresses" $
+      forAll (readableAddress `suchThat` odd) $ \addr -> isError $ setPC addr
+
+    prop "fails for invalid addresses" $
+      forAll (invalidAddress `suchThat` even) $ \addr -> isError $ setPC addr
+
+    prop "getPC returns what was set" $
+      forAll validPC $ \addr env state ->
+        evalSystem env state (setPC addr >> getPC) == Right addr
+
+    prop "only changes the PC" $
+      forAll validPC $ \addr ->
+        isNonMutating $ do
+          old <- getPC
+          setPC addr
+          setPC old
+
+  describe "pop" $ do
+    prop "pop fails on empty stack" $
+      \env -> isError pop env initialSystemState
+              
+    prop "pop returns elements in the reverse order they were pushed" $
+      \elems env state ->
+        let popped = evalSystem env state $ do
+              mapM_ push elems
+              replicateM (length elems) pop
+        in popped == Right (reverse elems)
+      
