@@ -26,10 +26,13 @@ import Test.QuickCheck.Gen
 import Test.QuickCheck.Arbitrary
 import Control.Applicative
 import Hip8.System
+import Hip8.Display
 import qualified Data.Vector.Generic as Vector
 import qualified Data.Vector.Unboxed as UVector
 import Control.Monad
 import Data.Word
+import Data.Ix
+import Data.List
 
 -- |Generates an arbitrary vector of a given length.
 dataVector :: (Vector.Vector v a, Arbitrary a) => Int -> Gen (v a)
@@ -42,6 +45,16 @@ anyKey = choose (0x0, 0xF)
 instance (Arbitrary a, UVector.Unbox a) => Arbitrary (UVector.Vector a) where
   arbitrary = Vector.fromList <$> arbitrary
   shrink x = Vector.fromList <$> shrink (Vector.toList x)
+
+instance Arbitrary DisplayBuffer where
+  arbitrary = sized $ \size -> do
+    width <- (8 *) <$> resize (size `quot` 8) (arbitrary `suchThat` (>0))
+    height <- arbitrary `suchThat` (>0)
+
+    let coords = range ((0, 0), (width - 1, height - 1))
+    assocs <- zip coords <$> sequence (repeat arbitrary)
+    let doSet disp (c, x) = setPixelAt disp c x
+    return $ foldl' doSet (emptyDisplay (width, height)) assocs
 
 instance Arbitrary Environment where
   arbitrary = Environment

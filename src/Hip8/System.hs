@@ -13,6 +13,8 @@ module Hip8.System (
   numRegisters,
   userMemoryStart,
   initialSystemState,
+  initialDisplayBuffer,
+  displaySize,
   SystemException(..),
   System,
   runSystem,
@@ -36,8 +38,10 @@ module Hip8.System (
   pop
   ) where
 
+import Hip8.Display
 import Control.Monad.Trans.State
 import Control.Applicative
+import Data.Vector.Unboxed (Vector)
 import qualified Data.Vector.Unboxed as Vector
 import qualified Data.Vector.Unboxed.Mutable as MVector
 import Data.Word
@@ -56,9 +60,9 @@ data TimerSetting = NotSet | Set Float Word8
 -- |Describes the state of the system including the CPU and the display.
 data SystemState = SystemState {
   -- |The main memory vector
-  mainMemory :: Vector.Vector Word8,
+  mainMemory :: Vector Word8,
   -- |The standard Vx registers
-  registers :: Vector.Vector Word8,
+  registers :: Vector Word8,
   -- |The I register
   registerI :: Word16,
   -- |The stack
@@ -68,7 +72,9 @@ data SystemState = SystemState {
   -- |The delay timer setting
   delayTimerSetting :: TimerSetting,
   -- |The sound timer setting
-  soundTimerSetting :: TimerSetting
+  soundTimerSetting :: TimerSetting,
+  -- |The display buffer.
+  displayBuffer :: DisplayBuffer
   } deriving (Eq, Show)
 
 -- |The memory size of the Chip-8 system
@@ -92,8 +98,13 @@ initialSystemState = SystemState {
   stack = [],
   programCounter = userMemoryStart,
   delayTimerSetting = NotSet,
-  soundTimerSetting = NotSet
+  soundTimerSetting = NotSet,
+  displayBuffer = emptyDisplay displaySize
   }
+
+-- |The Chip-8 standard display dimensions.
+displaySize :: (Int, Int)
+displaySize = (64, 32)
 
 -- |Indicates an error while simulating the hardware, i.e. invalid memory access etc.
 data SystemException = SystemException String
@@ -177,7 +188,7 @@ getMem addr = do
   return $ mainMemory st Vector.! fromIntegral addr
 
 -- |Writes the contents of the given vector into memory.
-writeMem :: Word16 -> Vector.Vector Word8 -> System ()
+writeMem :: Word16 -> Vector Word8 -> System ()
 writeMem addr bytes = do
   let index = fromIntegral addr
       len = Vector.length bytes
@@ -196,7 +207,7 @@ writeMem addr bytes = do
 -- |Reads the given number of bytes starting at the given address.
 readMem :: Word16 -- ^The start address
         -> Word16 -- ^The number of bytes to read
-        -> System (Vector.Vector Word8)
+        -> System (Vector Word8)
 readMem addr len = do
   let endAddr = addr + len
   unless (endAddr <= memorySize) $
@@ -259,4 +270,3 @@ pop = do
   let (ret:newStack) = stk
   putSystemState $ st { stack = newStack }
   return ret
-
