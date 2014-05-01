@@ -138,7 +138,7 @@ getEnvironment = System $ fst <$> get
 getSystemState :: System SystemState
 getSystemState = System $ snd <$> get
 
--- |Returns the current 'SystemState'.
+-- |Sets the current 'SystemState'.
 putSystemState :: SystemState -> System ()
 putSystemState s = do
   (env, _) <- System get
