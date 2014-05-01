@@ -44,7 +44,9 @@ instance (Arbitrary a, UVector.Unbox a) => Arbitrary (UVector.Vector a) where
   shrink x = Vector.fromList <$> shrink (Vector.toList x)
 
 instance Arbitrary Environment where
-  arbitrary = Environment <$> (arbitrary `suchThat` (>0.0)) <*> anyKey
+  arbitrary = Environment
+              <$> (arbitrary `suchThat` (>0.0))
+              <*> oneof [pure Nothing, Just <$> anyKey]
 
 instance Arbitrary SystemState where
   arbitrary = do
