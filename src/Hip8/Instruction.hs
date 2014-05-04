@@ -9,6 +9,7 @@ module Hip8.Instruction (
   InstructionInfo(..),
   Instruction(..),
   parseInstruction,
+  execInstruction,
   sys,
   cls,
   ret,
@@ -125,17 +126,21 @@ parseInstruction word =
         reg = nibble
         byte = getBits 8
 
+-- |Executes the given instruction
+execInstruction :: Instruction -> System ()
+execInstruction (Instruction _ system) = system
+
 sys :: Word16 -> Instruction
 sys addr = Instruction (InstructionInfo "SYS" [Addr addr]) exec
   where exec = systemException "SYS instruction is not allowed"
 
 cls :: Instruction
 cls = Instruction (InstructionInfo "CLS" []) exec
-  where exec = undefined
+  where exec = clearDisplay
 
 ret :: Instruction
 ret = Instruction (InstructionInfo "RET" []) exec
-  where exec = undefined
+  where exec = pop >>= setPC >> stepPC
 
 jpAddr :: Word16 -> Instruction
 jpAddr addr = Instruction (InstructionInfo "JP" [Addr addr]) exec

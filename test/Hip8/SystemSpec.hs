@@ -12,7 +12,9 @@ module Hip8.SystemSpec (
   validPC,
   validRegisterIndex,
   invalidRegisterIndex,
-  spec
+  spec,
+  isError,
+  isNonMutating
   ) where
 
 import Hip8.System
@@ -39,7 +41,7 @@ instance Arbitrary SystemState where
     mem <- dataVector $ fromIntegral (memorySize - userMemoryStart)
     reg <- vector $ fromIntegral numRegisters
     regi <- readableAddress
-    stack <- listOf validPC
+    stk <- listOf validPC
     pc <- validPC
     env <- arbitrary
 
@@ -47,7 +49,7 @@ instance Arbitrary SystemState where
           writeMem userMemoryStart mem
           forM_ (zip [0..] reg) $ uncurry setReg
           setRegI regi
-          forM_ stack push
+          forM_ stk push
           setPC pc
     return state
 
@@ -259,6 +261,12 @@ spec = do
           setPC addr
           setPC old
 
+  describe "stepPC" $
+    prop "increases PC by 2" $
+      \env state -> let pc = programCounter state
+                    in (pc <= memorySize - 4) ==>
+                         evalSystem env state (stepPC >> getPC) == Right (pc + 2)
+  
   describe "pop" $ do
     prop "pop fails on empty stack" $
       \env -> isError pop env initialSystemState
@@ -270,3 +278,6 @@ spec = do
               replicateM (length elems) pop
         in popped == Right (reverse elems)
       
+  describe "clearDisplay" $
+    prop "makes the screen black" $
+      \env state -> (displayBuffer <$> execSystem env state clearDisplay) == Right initialDisplay

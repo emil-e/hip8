@@ -1,10 +1,13 @@
-module Hip8.InstructionSpec (spec) where
+module Hip8.InstructionSpec (Hip8.InstructionSpec.spec) where
 
 import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck
+import Hip8.System
 import Hip8.Instruction
+import Hip8.SystemSpec
 import Data.Maybe
+import Control.Applicative
 
 spec :: Spec
 spec = do
@@ -85,3 +88,15 @@ spec = do
         let i1 = parseInstruction w1
             i2 = parseInstruction w2
         in isNothing i1 || i1 /= i2
+
+  describe "sys" $
+    prop "always fails" $
+      \addr -> isError $ execInstruction $ sys addr
+
+  describe "ret" $
+    prop "sets the PC to the top of the stack + 2" $
+      forAll (arbitrary `suchThat` (not . null . stack)) $ \state env ->
+        let stackHead = head $ stack state
+            state' = execSystem env state $ execInstruction ret
+        in (stackHead <= memorySize - 4) ==>
+             (programCounter <$> state') == Right (stackHead + 2)

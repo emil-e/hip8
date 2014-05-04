@@ -9,10 +9,14 @@ The System monad
 module Hip8.System (
   Environment(..),
   SystemState,
+  stack,
+  programCounter,
+  displayBuffer,
   memorySize,
   numRegisters,
   userMemoryStart,
   initialSystemState,
+  initialDisplay,
   displaySize,
   SystemException(..),
   System,
@@ -33,8 +37,10 @@ module Hip8.System (
   getRegI,
   setPC,
   getPC,
+  stepPC,
   push,
-  pop
+  pop,
+  clearDisplay
   ) where
 
 import Hip8.Bitmap (Bitmap)
@@ -60,22 +66,34 @@ data TimerSetting = NotSet | Set Float Word8
 -- |Describes the state of the system including the CPU and the display.
 data SystemState = SystemState {
   -- |The main memory vector
-  mainMemory :: Vector Word8,
+  _mainMemory :: Vector Word8,
   -- |The standard Vx registers
-  registers :: Vector Word8,
+  _registers :: Vector Word8,
   -- |The I register
-  registerI :: Word16,
+  _registerI :: Word16,
   -- |The stack
-  stack :: [Word16],
+  _stack :: [Word16],
   -- |The program counter
-  programCounter :: Word16,
+  _programCounter :: Word16,
   -- |The delay timer setting
-  delayTimerSetting :: TimerSetting,
+  _delayTimerSetting :: TimerSetting,
   -- |The sound timer setting
-  soundTimerSetting :: TimerSetting,
+  _soundTimerSetting :: TimerSetting,
   -- |The display buffer.
-  displayBuffer :: Bitmap
+  _displayBuffer :: Bitmap
   } deriving (Eq, Show)
+
+-- |Returns the stack of the given 'SystemState'.
+stack :: SystemState -> [Word16]
+stack = _stack
+
+-- |Returns the program count of the given 'SystemState'.
+programCounter :: SystemState -> Word16
+programCounter = _programCounter
+
+-- |Returns the display buffer of the given 'SystemState'.
+displayBuffer :: SystemState -> Bitmap
+displayBuffer = _displayBuffer
 
 -- |The memory size of the Chip-8 system
 memorySize :: Word16
@@ -92,19 +110,23 @@ userMemoryStart = 0x200
 -- |The initial system state with no program loaded
 initialSystemState :: SystemState
 initialSystemState = SystemState {
-  mainMemory = Vector.replicate (fromIntegral memorySize) 0,
-  registers = Vector.replicate (fromIntegral numRegisters) 0,
-  registerI = 0,
-  stack = [],
-  programCounter = userMemoryStart,
-  delayTimerSetting = NotSet,
-  soundTimerSetting = NotSet,
-  displayBuffer = Bitmap.black displaySize
+  _mainMemory = Vector.replicate (fromIntegral memorySize) 0,
+  _registers = Vector.replicate (fromIntegral numRegisters) 0,
+  _registerI = 0,
+  _stack = [],
+  _programCounter = userMemoryStart,
+  _delayTimerSetting = NotSet,
+  _soundTimerSetting = NotSet,
+  _displayBuffer = initialDisplay
   }
 
 -- |The Chip-8 standard display dimensions.
 displaySize :: (Int, Int)
 displaySize = (64, 32)
+
+-- |A new black display.
+initialDisplay :: Bitmap
+initialDisplay = Bitmap.black displaySize
 
 -- |Indicates an error while simulating the hardware, i.e. invalid memory access etc.
 data SystemException = SystemException String
@@ -174,10 +196,10 @@ setMem addr value = do
     systemException (printf "Invalid memory write at 0x%X" addr)
     
   modifySystemState $ \st ->
-    st { mainMemory = let index = fromIntegral addr
+    st { _mainMemory = let index = fromIntegral addr
                       in Vector.modify
                            (\v -> MVector.write v index value)
-                           (mainMemory st)}
+                           (_mainMemory st)}
 
 -- |Returns the value at the given memory address.
 getMem :: Word16 -> System Word8
@@ -185,7 +207,7 @@ getMem addr = do
   unless (addr < memorySize) $
     systemException (printf "Invalid memory write at 0x%X" addr)
   st <- getSystemState
-  return $ mainMemory st Vector.! fromIntegral addr
+  return $ _mainMemory st Vector.! fromIntegral addr
 
 -- |Writes the contents of the given vector into memory.
 writeMem :: Word16 -> Vector Word8 -> System ()
@@ -200,9 +222,9 @@ writeMem addr bytes = do
     systemException (printf "Write ends on invalid memory address: 0x%X" endAddr)
     
   modifySystemState $ \st ->
-    st { mainMemory = Vector.modify
+    st { _mainMemory = Vector.modify
                         (\v -> Vector.copy (MVector.slice index len v) bytes)
-                        (mainMemory st) }
+                        (_mainMemory st) }
 
 -- |Reads the given number of bytes starting at the given address.
 readMem :: Word16 -- ^The start address
@@ -214,7 +236,7 @@ readMem addr len = do
     systemException (printf "Read ends on invalid memory address 0x%X" endAddr)
     
   st <- getSystemState
-  return $ Vector.slice (fromIntegral addr) (fromIntegral len) (mainMemory st)
+  return $ Vector.slice (fromIntegral addr) (fromIntegral len) (_mainMemory st)
 
 -- |Sets the value of the registry with the given index.
 setReg :: Word8   -- ^The registry index
@@ -224,9 +246,9 @@ setReg index value = do
   unless (index < numRegisters) $
     systemException (printf "Write to invalid register 0x%X" index)
   modifySystemState $ \st ->
-    st { registers = Vector.modify
+    st { _registers = Vector.modify
                        (\v -> MVector.write v (fromIntegral index) value)
-                       (registers st) }
+                       (_registers st) }
 
 -- |Returns the value of the registry with the given index.
 getReg :: Word8 -> System Word8
@@ -234,15 +256,15 @@ getReg index = do
   unless (index < numRegisters) $
     systemException (printf "Read from invalid register 0x%X" index)
   st <- getSystemState
-  return $ registers st Vector.! fromIntegral index
+  return $ _registers st Vector.! fromIntegral index
 
 -- |Sets the value of the I register.
 setRegI :: Word16 -> System ()
-setRegI value = modifySystemState $ \st -> st { registerI = value }
+setRegI value = modifySystemState $ \st -> st { _registerI = value }
 
 -- |Returns the value of the I register.
 getRegI :: System Word16
-getRegI = registerI <$> getSystemState
+getRegI = _registerI <$> getSystemState
 
 -- |Sets the program counter. Must be even.
 setPC :: Word16 -> System ()
@@ -251,22 +273,33 @@ setPC value = do
     systemException (printf "Address 0x%X is not even and thus not a valid PC" value)
   unless (value < memorySize) $
     systemException (printf "Invalid address 0x%X" value)
-  modifySystemState $ \st ->  st { programCounter = value }
+  modifySystemState $ \st -> st { _programCounter = value }
 
 -- |Returns the program counter.
 getPC :: System Word16
-getPC = programCounter <$> getSystemState
+getPC = _programCounter <$> getSystemState
+
+-- |Steps the program counter.
+stepPC :: System ()
+stepPC = do
+  pc <- getPC
+  setPC (pc + 2)
 
 -- |Pushes the given address onto the stack.
 push :: Word16 -> System ()
-push value = modifySystemState $ \st -> st { stack = value : stack st }
+push value = modifySystemState $ \st -> st { _stack = value : _stack st }
 
 -- |Pops the topmost value from the stack.
 pop :: System Word16
 pop = do
   st <- getSystemState
-  let stk = stack st
+  let stk = _stack st
   when (null stk) $ systemException "Cannot pop empty stack"
   let (ret:newStack) = stk
-  putSystemState $ st { stack = newStack }
+  putSystemState $ st { _stack = newStack }
   return ret
+
+-- |Clears the display.
+clearDisplay :: System ()
+clearDisplay = modifySystemState $ \st -> st { _displayBuffer = initialDisplay }
+                
