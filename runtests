@@ -1,0 +1,2 @@
+#!/bin/sh
+cabal build && dist/build/hip8-tests/hip8-tests
