@@ -13,7 +13,6 @@ module Hip8.System (
   numRegisters,
   userMemoryStart,
   initialSystemState,
-  initialDisplayBuffer,
   displaySize,
   SystemException(..),
   System,
@@ -38,7 +37,8 @@ module Hip8.System (
   pop
   ) where
 
-import Hip8.Display
+import Hip8.Bitmap (Bitmap)
+import qualified Hip8.Bitmap as Bitmap
 import Control.Monad.Trans.State
 import Control.Applicative
 import Data.Vector.Unboxed (Vector)
@@ -74,7 +74,7 @@ data SystemState = SystemState {
   -- |The sound timer setting
   soundTimerSetting :: TimerSetting,
   -- |The display buffer.
-  displayBuffer :: DisplayBuffer
+  displayBuffer :: Bitmap
   } deriving (Eq, Show)
 
 -- |The memory size of the Chip-8 system
@@ -99,7 +99,7 @@ initialSystemState = SystemState {
   programCounter = userMemoryStart,
   delayTimerSetting = NotSet,
   soundTimerSetting = NotSet,
-  displayBuffer = emptyDisplay displaySize
+  displayBuffer = Bitmap.black displaySize
   }
 
 -- |The Chip-8 standard display dimensions.
