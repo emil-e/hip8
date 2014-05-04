@@ -25,26 +25,33 @@ instance Arbitrary Bitmap where
     height <- arbitrary `suchThat` (>0)
     bitmapWithSize (width, height)
 
+-- |Generates a set of valid bitmap dimensions.
 bitmapDimensions :: Gen (Int, Int)
 bitmapDimensions = do
   width <- bitmapWidth
   height <- arbitrary `suchThat` (>0)
   return (width, height)
 
+-- |Generates a valid bitmap width.
 bitmapWidth :: Gen Int
 bitmapWidth = sized $ \size -> (8 *) <$> resize (size `quot` 8) (arbitrary `suchThat` (>0))
 
+-- |Generates an arbitrary black bitmap.
 blackBitmap :: Gen Bitmap
 blackBitmap = Bitmap.black <$> bitmapDimensions
 
+-- |Generates an arbitrary white bitmap.
 whiteBitmap :: Gen Bitmap
 whiteBitmap = Bitmap.white <$> bitmapDimensions
 
+-- |Generates an arbitrary bitmap of the given size.
 bitmapWithSize :: (Int, Int) -> Gen Bitmap
 bitmapWithSize (width, height) = do
   vec <- dataVector (height * (width `quot` 8))
   return $ Bitmap.make (width, height) vec
 
+-- |Generates dimensions which are smaller or equal to the dimensions of the
+-- given bitmap.
 smallerDimensions :: Bitmap -> Gen (Int, Int)
 smallerDimensions bitmap = do
   let (w, h) = Bitmap.dimensions bitmap
@@ -52,16 +59,20 @@ smallerDimensions bitmap = do
   height <- choose (1, h)
   return (width, height)
 
+-- |Generates an arbitrary bitmap which is smaller or the same size as the given bitmap.
 smallerBitmap :: Bitmap -> Gen Bitmap
 smallerBitmap bitmap = smallerDimensions bitmap >>= bitmapWithSize
 
+-- |Generates a black bitmap which is smaller or the same size as the given bitmap.
 smallerBlackBitmap :: Bitmap -> Gen Bitmap
 smallerBlackBitmap bitmap = Bitmap.black <$> smallerDimensions bitmap
 
+-- |Generates a pair of X/Y coordinates within the given bitmap.
 xyWithin :: Bitmap -> Gen (Int, Int)
 xyWithin bitmap = let (w, h) = Bitmap.dimensions bitmap
                   in liftA2 (,) (choose (0, w - 1)) (choose (0, h - 1))
 
+-- |Generates a pair of X/Y coordinates denoting a pixel with the given color within the given bitmap.
 xyOfColourWithin :: Bitmap -> Bool -> Gen (Int, Int)
 xyOfColourWithin bmp v = xyWithin bmp `suchThat` (\c -> Bitmap.pixelAt bmp c == v)
 
