@@ -11,10 +11,14 @@ module Hip8.Bitmap (
   buffer,
   make,
   black,
+  isBlack,
+  white,
+  isWhite,
   pixelAt,
   setPixelAt,
   toString,
-  blit
+  blit,
+  numWhitePixels
   ) where
 
 import Data.Vector.Unboxed (Vector, (!))
@@ -46,10 +50,23 @@ make (width, height) vec
   | otherwise = Bitmap (width, height) vec
   where n = (width `quot` 8) * height
 
--- |Creates an black bitmap of the given size.
+-- |Creates a black bitmap of the given size.
 black :: (Int, Int) -> Bitmap
 black (width, height) = make (width, height) $ Vector.replicate n 0
   where n = (width `quot` 8) * height
+
+-- |Returns true if the given bitmap is black.
+isBlack :: Bitmap -> Bool
+isBlack (Bitmap _ buf) = Vector.all (== 0) buf
+
+-- |Creates a white bitmap of the given size.
+white :: (Int, Int) -> Bitmap
+white (width, height) = make (width, height) $ Vector.replicate n 0xFF
+  where n = (width `quot` 8) * height
+
+-- |Returns true if the given bitmap is white.
+isWhite :: Bitmap -> Bool
+isWhite (Bitmap _ buf) = Vector.all (== 0xFF) buf
 
 -- |Tests whether the pixel at the given coordinates is set.
 pixelAt :: Bitmap -> (Int, Int) -> Bool
@@ -85,8 +102,8 @@ blit :: Bitmap      -- ^The target bitmap
      -> Bitmap      -- ^The sprite
      -> (Int, Int)  -- ^The X Y coordinates
      -> Bitmap
-blit dest@(Bitmap (dw, dh) dbuf) (Bitmap (sw, _) sbuf) (ox, oy)
-  | (dw < sw) || (dh < dw) = error "Destination smaller than source"
+blit dest@(Bitmap (dw, dh) dbuf) (Bitmap (sw, sh) sbuf) (ox, oy)
+  | (dw < sw) || (dh < sh) = error "Destination smaller than source"
   | otherwise = Bitmap (dw, dh) $ Vector.accum xor dbuf $ blitAssocs (Vector.indexed sbuf)
 -- So we're creating an association list that maps fragments of the source bitmap to indexes
 -- in the destination bitmap. We then accumulate those into the destination bitmap using XOR
@@ -108,3 +125,7 @@ blit dest@(Bitmap (dw, dh) dbuf) (Bitmap (sw, _) sbuf) (ox, oy)
                         in (leftIndex, leftPart) :
                            (rightIndex, rightPart) :
                            blitAssocs  (Vector.tail vec)
+
+-- |Returns the number of white pixels in the given 'Bitmap'.
+numWhitePixels :: Bitmap -> Int
+numWhitePixels (Bitmap _ buf) = Vector.sum $ Vector.map popCount buf

@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Hip8.BitmapSpec (
-  anyBlackBitmap,
+  blackBitmap,
   bitmapWithSize,
   smallerDimensions,
   smallerBitmap,
@@ -12,11 +12,10 @@ module Hip8.BitmapSpec (
 import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck
-import Hip8.Bitmap
+import Hip8.Bitmap (Bitmap)
+import qualified Hip8.Bitmap as Bitmap
 import Hip8.Generators
 import Control.Applicative
-import Data.Bits
-import qualified Data.Vector.Generic as Vector
 
 instance Arbitrary Bitmap where
   arbitrary = do
@@ -27,20 +26,20 @@ instance Arbitrary Bitmap where
 bitmapWidth :: Gen Int
 bitmapWidth = sized $ \size -> (8 *) <$> resize (size `quot` 8) (arbitrary `suchThat` (>0))
 
-anyBlackBitmap :: Gen Bitmap
-anyBlackBitmap = do
+blackBitmap :: Gen Bitmap
+blackBitmap = do
   width <- bitmapWidth
   height <- arbitrary `suchThat` (>0)
-  return $ emptyBitmap (width, height)
+  return $ Bitmap.black (width, height)
 
 bitmapWithSize :: (Int, Int) -> Gen Bitmap
 bitmapWithSize (width, height) = do
   vec <- dataVector (height * (width `quot` 8))
-  return $ makeBitmap (width, height) vec
+  return $ Bitmap.make (width, height) vec
 
 smallerDimensions :: Bitmap -> Gen (Int, Int)
 smallerDimensions bitmap = do
-  let (w, h) = dimensions bitmap
+  let (w, h) = Bitmap.dimensions bitmap
   width <- bitmapWidth `suchThat` (<= w)
   height <- choose (1, h)
   return (width, height)
@@ -49,30 +48,33 @@ smallerBitmap :: Bitmap -> Gen Bitmap
 smallerBitmap bitmap = smallerDimensions bitmap >>= bitmapWithSize
 
 smallerBlackBitmap :: Bitmap -> Gen Bitmap
-smallerBlackBitmap bitmap = emptyBitmap <$> smallerDimensions bitmap
+smallerBlackBitmap bitmap = Bitmap.black <$> smallerDimensions bitmap
 
 xyWithin :: Bitmap -> Gen (Int, Int)
-xyWithin bitmap = let (w, h) = dimensions bitmap
+xyWithin bitmap = let (w, h) = Bitmap.dimensions bitmap
                   in liftA2 (,) (choose (0, w - 1)) (choose (0, h - 1))
+
+xyOfColourWithin :: Bitmap -> Bool -> Gen (Int, Int)
+xyOfColourWithin bmp v = xyWithin bmp `suchThat` (\c -> Bitmap.pixelAt bmp c == v)
 
 spec :: Spec
 spec = do
   describe "pixelAt" $
     prop "wraps around if outside bounds" $
       \bitmap (Positive x) (Positive y) (Positive nx) (Positive ny) ->
-        let (width, height) = dimensions bitmap
-        in pixelAt bitmap (x + nx * width, y + ny * height) == pixelAt bitmap (x, y)
+        let (width, height) = Bitmap.dimensions bitmap
+        in Bitmap.pixelAt bitmap (x + nx * width, y + ny * height) == Bitmap.pixelAt bitmap (x, y)
   
   describe "setPixelAt" $ do
-    prop "pixelAt returns what setPixelAt set" $
+    prop "Bitmap.pixelAt returns what Bitmap.setPixelAt set" $
       \(Positive x) (Positive y) disp p ->
-        pixelAt (setPixelAt disp (x, y) p) (x, y) == p
+        Bitmap.pixelAt (Bitmap.setPixelAt disp (x, y) p) (x, y) == p
 
     prop "wraps around if outside bounds" $
       \(Positive x) (Positive y) (Positive nx) (Positive ny) ->
-      forAll anyBlackBitmap $ \bitmap ->
-        let (width, height) = dimensions bitmap
-        in pixelAt (setPixelAt bitmap (x + nx * width, y + ny * height) True) (x, y)
+      forAll blackBitmap $ \bitmap ->
+        let (width, height) = Bitmap.dimensions bitmap
+        in Bitmap.pixelAt (Bitmap.setPixelAt bitmap (x + nx * width, y + ny * height) True) (x, y)
             
 
   describe "blit" $ do
@@ -80,41 +82,56 @@ spec = do
       \dest (Positive dx) (Positive dy) ->
       forAll (smallerBlackBitmap dest) $ \src' ->
       forAll (xyWithin src') $ \(x, y) ->
-        let src = setPixelAt src' (x, y) True
-            result = blit dest src (dx, dy)
+        let src = Bitmap.setPixelAt src' (x, y) True
+            result = Bitmap.blit dest src (dx, dy)
             c = (x + dx, y + dy)
-        in pixelAt result c /= pixelAt dest c
+        in Bitmap.pixelAt result c /= Bitmap.pixelAt dest c
 
     prop "wraps around if outside bounds" $
       \dest (Positive x) (Positive y) (Positive nx) (Positive ny) ->
       forAll (smallerBitmap dest) $ \src ->
-        let (width, height) = dimensions dest
-        in blit dest src (x, y) == blit dest src (x + nx * width, y + ny * height)
+        let (width, height) = Bitmap.dimensions dest
+        in Bitmap.blit dest src (x, y) == Bitmap.blit dest src (x + nx * width, y + ny * height)
 
-    prop "double blit yields original bitmap" $
+    prop "double Bitmap.blit yields original bitmap" $
       \dest (Positive x) (Positive y) ->
       forAll (smallerBitmap dest) $ \src ->
-        blit (blit dest src (x, y)) src (x, y) == dest
+        Bitmap.blit (Bitmap.blit dest src (x, y)) src (x, y) == dest
 
     prop "no pixel left behind" $
       \(Positive x) (Positive y) ->
-      forAll anyBlackBitmap $ \dest ->
+      forAll blackBitmap $ \dest ->
       forAll (smallerBitmap dest) $ \src ->
-      let whitePixelCount bmp = Vector.sum $ Vector.map popCount $ buffer bmp
-      in whitePixelCount (blit dest src (x, y)) == whitePixelCount src
+        Bitmap.numWhitePixels (Bitmap.blit dest src (x, y)) == Bitmap.numWhitePixels src
 
-    prop "blit at zero to same size destination yields source" $
-      \src -> blit (emptyBitmap $ dimensions src) src (0, 0) == src
+    prop "Bitmap.blit at zero to same size destination yields source" $
+      \src -> Bitmap.blit (Bitmap.black $ Bitmap.dimensions src) src (0, 0) == src
 
     prop "empty source doesn't change destination" $
       \dest (Positive x) (Positive y) ->
       forAll (smallerBlackBitmap dest) $ \src ->
-        blit dest src (x, y) == dest
+        Bitmap.blit dest src (x, y) == dest
 
     prop "leaves rest of destination intact" $
       \dest (Positive dx) (Positive dy) ->
       forAll (smallerBlackBitmap dest) $ \src' ->
       forAll (xyWithin src') $ \(x, y) ->
-        let src = setPixelAt src' (x, y) True
+        let src = Bitmap.setPixelAt src' (x, y) True
             c = (x + dx, y + dy)
-        in setPixelAt (blit dest src (dx, dy)) c (pixelAt dest c) == dest
+        in Bitmap.setPixelAt (Bitmap.blit dest src (dx, dy)) c (Bitmap.pixelAt dest c) == dest
+
+  describe "numWhitePixels" $ do
+    prop "is zero for black bitmaps" $
+      forAll blackBitmap $ \bmp -> Bitmap.numWhitePixels bmp == 0
+
+    prop "flipping a black pixel to white increases the count by one" $
+      forAll (arbitrary `suchThat` (not . Bitmap.isWhite)) $ \bmp ->
+      forAll (xyOfColourWithin bmp False) $ \c ->
+        Bitmap.numWhitePixels (Bitmap.setPixelAt bmp c True) == Bitmap.numWhitePixels bmp + 1
+
+    prop "flipping a white pixel to black decreases the count by one" $
+      forAll (arbitrary `suchThat` (not . Bitmap.isBlack)) $ \bmp ->
+      forAll (xyOfColourWithin bmp True) $ \c ->
+        Bitmap.numWhitePixels (Bitmap.setPixelAt bmp c False) == Bitmap.numWhitePixels bmp - 1
+
+  -- TODO tests for black/white and isBlack/isWhite?
