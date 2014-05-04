@@ -88,12 +88,19 @@ blit :: Bitmap      -- ^The target bitmap
 blit dest@(Bitmap (dw, dh) dbuf) (Bitmap (sw, _) sbuf) (ox, oy)
   | (dw < sw) || (dh < dw) = error "Destination smaller than source"
   | otherwise = Bitmap (dw, dh) $ Vector.accum xor dbuf $ blitAssocs (Vector.indexed sbuf)
+-- So we're creating an association list that maps fragments of the source bitmap to indexes
+-- in the destination bitmap. We then accumulate those into the destination bitmap using XOR
+-- as the merging function.
   where bitOffset = ox `rem` 8
         blitAssocs vec
           | Vector.null vec = []
           | otherwise = let (i, byte) = Vector.head vec
                             x = (i * 8) `rem` sw + ox
                             y = (i * 8) `quot` sw + oy
+                            -- Every byte will be split into two fragments since the target
+                            -- coordinates may not be a multiple of 8. This means part of the
+                            -- byte will end up in the target byte and the rest will end up
+                            -- in the byte to its right.
                             leftIndex = byteOffset dest (x, y)
                             rightIndex = byteOffset dest (x + 8, y)
                             leftPart = shiftR byte bitOffset
