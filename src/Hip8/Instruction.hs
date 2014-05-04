@@ -144,7 +144,7 @@ ret = Instruction (InstructionInfo "RET" []) exec
 
 jpAddr :: Word16 -> Instruction
 jpAddr addr = Instruction (InstructionInfo "JP" [Addr addr]) exec
-  where exec = undefined
+  where exec = setPC addr
   
 callAddr :: Word16 -> Instruction
 callAddr addr = Instruction (InstructionInfo  "CALL" [Addr addr]) exec

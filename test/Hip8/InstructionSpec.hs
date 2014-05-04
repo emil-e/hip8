@@ -93,10 +93,18 @@ spec = do
     prop "always fails" $
       \addr -> isError $ execInstruction $ sys addr
 
+  describe "cls" $
+    prop "clears the screen" $
+      \env state -> (displayBuffer <$> execSystem env state (execInstruction cls)) == Right initialDisplay
+
   describe "ret" $
     prop "sets the PC to the top of the stack + 2" $
       forAll (arbitrary `suchThat` (not . null . stack)) $ \state env ->
         let stackHead = head $ stack state
-            state' = execSystem env state $ execInstruction ret
-        in (stackHead <= memorySize - 4) ==>
-             (programCounter <$> state') == Right (stackHead + 2)
+            pc = evalSystem env state (execInstruction ret >> getPC)
+        in (stackHead <= memorySize - 4) ==> pc == Right (stackHead + 2)
+
+  describe "jpAddr" $
+    prop "sets the PC to the argument" $
+      forAll validPC $ \addr env state ->
+        evalSystem env state (execInstruction (jpAddr addr) >> getPC) == Right addr
