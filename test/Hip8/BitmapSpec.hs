@@ -1,5 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Hip8.BitmapSpec (
+  bitmapDimensions,
+  bitmapWidth,
   blackBitmap,
   bitmapWithSize,
   smallerDimensions,
@@ -23,14 +25,20 @@ instance Arbitrary Bitmap where
     height <- arbitrary `suchThat` (>0)
     bitmapWithSize (width, height)
 
+bitmapDimensions :: Gen (Int, Int)
+bitmapDimensions = do
+  width <- bitmapWidth
+  height <- arbitrary `suchThat` (>0)
+  return (width, height)
+
 bitmapWidth :: Gen Int
 bitmapWidth = sized $ \size -> (8 *) <$> resize (size `quot` 8) (arbitrary `suchThat` (>0))
 
 blackBitmap :: Gen Bitmap
-blackBitmap = do
-  width <- bitmapWidth
-  height <- arbitrary `suchThat` (>0)
-  return $ Bitmap.black (width, height)
+blackBitmap = Bitmap.black <$> bitmapDimensions
+
+whiteBitmap :: Gen Bitmap
+whiteBitmap = Bitmap.white <$> bitmapDimensions
 
 bitmapWithSize :: (Int, Int) -> Gen Bitmap
 bitmapWithSize (width, height) = do
@@ -134,4 +142,22 @@ spec = do
       forAll (xyOfColourWithin bmp True) $ \c ->
         Bitmap.numWhitePixels (Bitmap.setPixelAt bmp c False) == Bitmap.numWhitePixels bmp - 1
 
-  -- TODO tests for black/white and isBlack/isWhite?
+  describe "black" $
+    prop "isBlack returns true for all sizes" $
+      forAll bitmapDimensions $ \dim -> Bitmap.isBlack $ Bitmap.black dim
+
+  describe "white" $
+    prop "isWhite returns true for all sizes" $
+      forAll bitmapDimensions $ \dim -> Bitmap.isWhite $ Bitmap.white dim
+
+  describe "isBlack" $
+    prop "even a single pixel makes it return false" $
+      forAll blackBitmap $ \bmp ->
+      forAll (xyWithin bmp) $ \c ->
+        not $ Bitmap.isBlack $ Bitmap.setPixelAt bmp c True
+
+  describe "isWhite" $
+    prop "even a single pixel makes it return false" $
+      forAll whiteBitmap $ \bmp ->
+      forAll (xyWithin bmp) $ \c ->
+        not $ Bitmap.isWhite $ Bitmap.setPixelAt bmp c False
