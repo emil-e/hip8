@@ -9,6 +9,7 @@ The System monad
 module Hip8.System (
   Environment(..),
   SystemState,
+  register,
   stack,
   programCounter,
   displayBuffer,
@@ -47,7 +48,7 @@ import Hip8.Bitmap (Bitmap)
 import qualified Hip8.Bitmap as Bitmap
 import Control.Monad.Trans.State
 import Control.Applicative
-import Data.Vector.Unboxed (Vector)
+import Data.Vector.Unboxed (Vector, (!))
 import qualified Data.Vector.Unboxed as Vector
 import qualified Data.Vector.Unboxed.Mutable as MVector
 import Data.Word
@@ -82,6 +83,12 @@ data SystemState = SystemState {
   -- |The display buffer.
   _displayBuffer :: Bitmap
   } deriving (Eq, Show)
+
+-- |Returns the value of the register with the given index for the given 'SystemState'.
+register :: SystemState -> Word8 -> Word8
+register st index
+  | index >= numRegisters = error $ "Invalid register index " ++ show index
+  | otherwise = _registers st ! fromIntegral index
 
 -- |Returns the stack of the given 'SystemState'.
 stack :: SystemState -> [Word16]
@@ -239,7 +246,7 @@ readMem addr len = do
   return $ Vector.slice (fromIntegral addr) (fromIntegral len) (_mainMemory st)
 
 -- |Sets the value of the registry with the given index.
-setReg :: Word8   -- ^The registry index
+setReg :: Word8 -- ^The registry index
        -> Word8 -- ^The value
        -> System ()
 setReg index value = do
@@ -256,7 +263,7 @@ getReg index = do
   unless (index < numRegisters) $
     systemException (printf "Read from invalid register 0x%X" index)
   st <- getSystemState
-  return $ _registers st Vector.! fromIntegral index
+  return $ _registers st ! fromIntegral index
 
 -- |Sets the value of the I register.
 setRegI :: Word16 -> System ()

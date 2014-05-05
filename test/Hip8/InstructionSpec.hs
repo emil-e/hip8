@@ -8,6 +8,19 @@ import Hip8.Instruction
 import Hip8.SystemSpec
 import Data.Maybe
 import Control.Applicative
+import Data.Word
+import Data.Bits
+
+-- |Checks if the given action steps the PC by the given number of steps (i.e. increases the PC
+-- by N * 2) when run with the given 'Environment' and 'SystemState'.
+stepsPCBy :: Word16 -> System a -> Environment -> SystemState -> Property
+stepsPCBy n action env state =
+  forAll (pcWithStepMargin n) $ \pc ->
+    evalSystem env state $ do
+      setPC pc
+      action
+      pc' <- getPC
+      return $ (pc' - pc) `quot` 2 == n
 
 spec :: Spec
 spec = do
@@ -97,14 +110,113 @@ spec = do
     prop "clears the screen" $
       \env state -> (displayBuffer <$> execSystem env state (execInstruction cls)) == Right initialDisplay
 
-  describe "ret" $
-    prop "sets the PC to the top of the stack + 2" $
+  describe "ret" $ do
+    prop "sets the PC to the top of the stack plus one step" $
+      \(PC top) -> do push top
+                      execInstruction ret
+                      x <- getPC
+                      return $ x == (top + 2)
+
+    prop "pops the stack" $
       forAll (arbitrary `suchThat` (not . null . stack)) $ \state env ->
-        let stackHead = head $ stack state
-            pc = evalSystem env state (execInstruction ret >> getPC)
-        in (stackHead <= memorySize - 4) ==> pc == Right (stackHead + 2)
+        (stack <$> execSystem env state (execInstruction ret)) == Right (tail $ stack state)
+
+    prop "fails on empty stack" $
+      \env -> isError (execInstruction ret) env initialSystemState
+
+    prop "fails if return address is at end of memory" $
+      isError $ push (memorySize - 2) >> execInstruction ret
 
   describe "jpAddr" $
     prop "sets the PC to the argument" $
-      forAll validPC $ \addr env state ->
-        evalSystem env state (execInstruction (jpAddr addr) >> getPC) == Right addr
+      \(PC addr) -> do execInstruction (jpAddr addr)
+                       x <- getPC
+                       return $ x == addr
+
+  describe "callAddr" $ do
+    prop "jumps to the argument address" $
+      \(PC addr) -> do execInstruction (callAddr addr)
+                       x <- getPC
+                       return $ x == addr
+
+    prop "pushes the current PC onto the stack" $
+      \(PC pre) (PC addr) -> do setPC pre
+                                execInstruction (callAddr addr)
+                                x <- pop
+                                return $ x == pre
+
+  describe "seRegByte" $ do
+    prop "steps PC by one if register not equal to immediate" $
+      \env state (Reg reg) byte -> 
+        byte /= register state reg ==>
+          stepsPCBy 1 (execInstruction $ seRegByte reg byte) env state
+
+    prop "steps PC by two if register equal to immediate" $
+      \(Reg reg) byte -> 
+        stepsPCBy 2 (setReg reg byte >> execInstruction (seRegByte reg byte))
+
+  describe "sneRegByte" $ do
+    prop "steps PC by two if register not equal to immediate" $
+      \env state (Reg reg) byte -> 
+        byte /= register state reg ==>
+          stepsPCBy 2 (execInstruction $ sneRegByte reg byte) env state
+
+    prop "steps PC by one if register equal to immediate" $
+      \(Reg reg) byte -> 
+        stepsPCBy 1 (setReg reg byte >> execInstruction (sneRegByte reg byte))
+
+  describe "seRegReg" $ do
+    prop "steps PC by one if register not equal to immediate" $
+      \env state (Reg regx) (Reg regy) -> 
+        register state regx /= register state regy ==>
+          stepsPCBy 1 (execInstruction $ seRegReg regx regy) env state
+
+    prop "steps PC by two if register equal to immediate" $
+      \(Reg regx) (Reg regy) byte ->
+        stepsPCBy 2 $ do setReg regx byte
+                         setReg regy byte
+                         execInstruction (seRegReg regx regy)
+
+  describe "ldRegByte" $ do
+    prop "sets the given register to the immediate value" $
+      \(Reg reg) byte ->
+        do execInstruction (ldRegByte reg byte)
+           x <- getReg reg
+           return $ x == byte
+
+    prop "steps PC by one" $
+      \(Reg reg) byte -> stepsPCBy 1 (execInstruction (ldRegByte reg byte))
+
+  describe "addRegByte" $ do
+    prop "adds the immediate value to the given register" $
+      \(Reg reg) byte ->
+        do x <- getReg reg
+           execInstruction (addRegByte reg byte)
+           x' <- getReg reg
+           return $ x' == (x + byte)
+
+    prop "steps PC by one" $
+      \(Reg reg) byte -> stepsPCBy 1 (execInstruction (addRegByte reg byte))
+
+  describe "ldRegReg" $ do
+    prop "load Y into X" $
+      \(Reg regx) (Reg regy) ->
+        do y <- getReg regy
+           execInstruction (ldRegReg regx regy)
+           x <- getReg regx
+           return $ x == y
+
+    prop "steps PC by one" $
+      \(Reg regx) (Reg regy) -> stepsPCBy 1 (execInstruction (ldRegReg regx regy))
+
+  describe "orRegReg" $ do
+    prop "load Y into X" $
+      \(Reg regx) (Reg regy) ->
+        do x <- getReg regx
+           y <- getReg regy
+           execInstruction (orRegReg regx regy)
+           x' <- getReg regx
+           return $ x' == (x .|. y)
+
+    prop "steps PC by one" $
+      \(Reg regx) (Reg regy) -> stepsPCBy 1 (execInstruction (orRegReg regx regy))

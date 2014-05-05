@@ -51,12 +51,14 @@ import Hip8.BitParser
 import Hip8.System
 import Control.Applicative
 import Data.Word
+import Control.Monad
+import Data.Bits
 
 -- |A pseudo-argument to an instruction.
 data PseudoArg = Addr Word16
-               | Byte Word16
-               | Nibble Word16
-               | Reg Word16
+               | Byte Word8
+               | Nibble Word8
+               | Reg Word8
                | RegI
                | AddrI
                | DelayTimer
@@ -70,7 +72,7 @@ data PseudoArg = Addr Word16
 data InstructionInfo = InstructionInfo String [PseudoArg]
                      deriving (Show, Eq)
 
--- |An instruction with a describing string and a 'SystemTransformer' which performs
+-- |An instruction with a describing string and a 'System' action which performs
 -- the operation described by the info.
 data Instruction = Instruction InstructionInfo (System ())
 
@@ -122,9 +124,9 @@ parseInstruction word =
         const8 = assertEqBits 8
         const16 = assertEqBits 16
         addr = getBits 12
-        nibble = getBits 4
+        nibble = fromIntegral <$> getBits 4
         reg = nibble
-        byte = getBits 8
+        byte = fromIntegral <$> getBits 8
 
 -- |Executes the given instruction
 execInstruction :: Instruction -> System ()
@@ -148,65 +150,79 @@ jpAddr addr = Instruction (InstructionInfo "JP" [Addr addr]) exec
   
 callAddr :: Word16 -> Instruction
 callAddr addr = Instruction (InstructionInfo  "CALL" [Addr addr]) exec
-  where exec = undefined
+  where exec = getPC >>= push >> setPC addr
   
-seRegByte :: Word16 -> Word16 -> Instruction
+seRegByte :: Word8 -> Word8 -> Instruction
 seRegByte reg byte = Instruction (InstructionInfo "SE" [Reg reg, Byte byte]) exec
-  where exec = undefined
+  where exec = do x <- getReg reg
+                  when (x == byte) stepPC
+                  stepPC
   
-sneRegByte :: Word16 -> Word16 -> Instruction
+sneRegByte :: Word8 -> Word8 -> Instruction
 sneRegByte reg byte = Instruction (InstructionInfo "SNE" [Reg reg, Byte byte]) exec
-  where exec = undefined
+  where exec = do x <- getReg reg
+                  when (x /= byte) stepPC
+                  stepPC
 
-seRegReg :: Word16 -> Word16 -> Instruction
+seRegReg :: Word8 -> Word8 -> Instruction
 seRegReg regx regy = Instruction (InstructionInfo "SE" [Reg regx, Reg regy]) exec
-  where exec = undefined
+  where exec = do x <- getReg regx
+                  y <- getReg regy
+                  when (x == y) stepPC
+                  stepPC
   
-ldRegByte :: Word16 -> Word16 -> Instruction
+ldRegByte :: Word8 -> Word8 -> Instruction
 ldRegByte reg byte = Instruction (InstructionInfo "LDI" [Reg reg, Byte byte]) exec
-  where exec = undefined
+  where exec = setReg reg byte >> stepPC
 
-addRegByte :: Word16 -> Word16 -> Instruction
+addRegByte :: Word8 -> Word8 -> Instruction
 addRegByte reg byte = Instruction (InstructionInfo "ADDI" [Reg reg, Byte byte]) exec
-  where exec = undefined
+  where exec = do x <- getReg reg
+                  setReg reg $ x + byte
+                  stepPC
   
-ldRegReg :: Word16 -> Word16 -> Instruction
+ldRegReg :: Word8 -> Word8 -> Instruction
 ldRegReg regx regy = Instruction (InstructionInfo "LD" [Reg regx, Reg regy]) exec
-  where exec = undefined
+  where exec = do y <- getReg regy
+                  setReg regx y
+                  stepPC
   
-orRegReg :: Word16 -> Word16 -> Instruction
+orRegReg :: Word8 -> Word8 -> Instruction
 orRegReg regx regy = Instruction (InstructionInfo "OR" [Reg regx, Reg regy]) exec
-  where exec = undefined
+  where exec = do x <- getReg regx
+                  y <- getReg regy
+                  setReg regx (x .|. y)
+                  stepPC
 
-andRegReg :: Word16 -> Word16 -> Instruction
+andRegReg :: Word8 -> Word8 -> Instruction
 andRegReg regx regy = Instruction (InstructionInfo "AND" [Reg regx, Reg regy]) exec
   where exec = undefined
 
-xorRegReg :: Word16 -> Word16 -> Instruction
+xorRegReg :: Word8 -> Word8 -> Instruction
 xorRegReg regx regy = Instruction (InstructionInfo "XOR" [Reg regx, Reg regy]) exec
   where exec = undefined
 
-addRegReg :: Word16 -> Word16 -> Instruction
+addRegReg :: Word8 -> Word8 -> Instruction
 addRegReg regx regy = Instruction (InstructionInfo "ADD" [Reg regx, Reg regy]) exec
   where exec = undefined
 
-subRegReg :: Word16 -> Word16 -> Instruction
+subRegReg :: Word8 -> Word8 -> Instruction
 subRegReg regx regy = Instruction (InstructionInfo "SUB" [Reg regx, Reg regy]) exec
   where exec = undefined
 
-shr :: Word16 -> Word16 -> Instruction
+shr :: Word8 -> Word8 -> Instruction
 shr regx regy = Instruction (InstructionInfo "SHR" [Reg regx, Reg regy]) exec
   where exec = undefined
 
-subnRegReg :: Word16 -> Word16 -> Instruction
+subnRegReg :: Word8 -> Word8 -> Instruction
 subnRegReg regx regy = Instruction (InstructionInfo "SUBN" [Reg regx, Reg regy]) exec
   where exec = undefined
 
-shl :: Word16 -> Word16 -> Instruction
+shl :: Word8 -> Word8 -> Instruction
 shl regx regy = Instruction (InstructionInfo "SHL" [Reg regx, Reg regy]) exec
   where exec = undefined
 
-sneRegReg :: Word16 -> Word16 -> Instruction
+sneRegReg :: Word8 -> Word8 -> Instruction
 sneRegReg regx regy = Instruction (InstructionInfo "SNE" [Reg regx, Reg regy]) exec
   where exec = undefined
 
@@ -218,54 +234,54 @@ jpV0Addr :: Word16 -> Instruction
 jpV0Addr addr = Instruction (InstructionInfo "JP" [Reg 0, Addr addr]) exec
   where exec = undefined
 
-rnd :: Word16 -> Word16 -> Instruction
+rnd :: Word8 -> Word8 -> Instruction
 rnd reg mask = Instruction (InstructionInfo "RND" [Reg reg, Byte mask]) exec
   where exec = undefined
 
-drw :: Word16 -> Word16 -> Word16 -> Instruction
+drw :: Word8 -> Word8 -> Word8 -> Instruction
 drw xreg yreg n  = Instruction (InstructionInfo "DRW" [Reg xreg, Reg yreg, Nibble n]) exec
   where exec = undefined
 
-skp :: Word16 -> Instruction
+skp :: Word8 -> Instruction
 skp reg = Instruction (InstructionInfo "SKP" [Reg reg]) exec
   where exec = undefined
 
-sknp :: Word16 -> Instruction
+sknp :: Word8 -> Instruction
 sknp reg = Instruction (InstructionInfo "SKNP" [Reg reg]) exec
   where exec = undefined
 
-ldRegDT :: Word16 -> Instruction
+ldRegDT :: Word8 -> Instruction
 ldRegDT reg = Instruction (InstructionInfo "LD" [Reg reg, DelayTimer]) exec
   where exec = undefined
 
-ldRegKey :: Word16 -> Instruction
+ldRegKey :: Word8 -> Instruction
 ldRegKey reg = Instruction (InstructionInfo "LD" [Reg reg, Key]) exec
   where exec = undefined
 
-ldDTReg :: Word16 -> Instruction
+ldDTReg :: Word8 -> Instruction
 ldDTReg reg = Instruction (InstructionInfo "LD" [DelayTimer, Reg reg]) exec
   where exec = undefined
 
-ldSTReg :: Word16 -> Instruction
+ldSTReg :: Word8 -> Instruction
 ldSTReg reg = Instruction (InstructionInfo "LD" [SoundTimer, Reg reg]) exec
   where exec = undefined
 
-addIReg :: Word16 -> Instruction
+addIReg :: Word8 -> Instruction
 addIReg reg = Instruction (InstructionInfo "ADD" [RegI, Reg reg]) exec
   where exec = undefined
 
-ldFReg :: Word16 -> Instruction
+ldFReg :: Word8 -> Instruction
 ldFReg reg = Instruction (InstructionInfo "LD" [SpriteLoc, Reg reg]) exec
   where exec = undefined
 
-ldBReg :: Word16 -> Instruction
+ldBReg :: Word8 -> Instruction
 ldBReg reg = Instruction (InstructionInfo "LD" [BCD, Reg reg]) exec
   where exec = undefined
 
-ldMemRegs :: Word16 -> Instruction
+ldMemRegs :: Word8 -> Instruction
 ldMemRegs x = Instruction (InstructionInfo "LD" [AddrI, Reg x]) exec
   where exec = undefined
 
-ldRegsMem :: Word16 -> Instruction
+ldRegsMem :: Word8 -> Instruction
 ldRegsMem x = Instruction (InstructionInfo "LD" [Reg x, AddrI]) exec
   where exec = undefined

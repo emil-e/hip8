@@ -1,6 +1,8 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Hip8.SystemSpec (
   anyKey,
+
+  Address(..),
   readableAddress,
   invalidAddress,
   writableAddress,
@@ -9,19 +11,27 @@ module Hip8.SystemSpec (
   writableArea,
   readOnlyArea,
   invalidArea,
+
+  PC(..),
   validPC,
+  pcWithStepMargin,
+
+  Reg(..),
   validRegisterIndex,
   invalidRegisterIndex,
-  spec,
+  
+  Hip8.SystemSpec.spec,
   isError,
   isNonMutating
   ) where
 
 import Hip8.System
 import Hip8.Generators
+import Hip8.BitmapSpec
 import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck
+import qualified Test.QuickCheck.Property as Prop
 import qualified Data.Vector.Generic as Vector
 import Control.Applicative
 import Control.Monad
@@ -41,9 +51,10 @@ instance Arbitrary SystemState where
     mem <- dataVector $ fromIntegral (memorySize - userMemoryStart)
     reg <- vector $ fromIntegral numRegisters
     regi <- readableAddress
-    stk <- listOf validPC
-    pc <- validPC
+    stk <- listOf $ pcWithStepMargin 1
+    pc <- pcWithStepMargin 1
     env <- arbitrary
+    disp <- bitmapWithSize displaySize
 
     let (Right state) = execSystem env initialSystemState $ do
           writeMem userMemoryStart mem
@@ -52,6 +63,24 @@ instance Arbitrary SystemState where
           forM_ stk push
           setPC pc
     return state
+
+-- Make 'Either' testable
+instance (Testable prop, Show a) => Testable (Either a prop) where
+  property (Left x) = property Prop.result { Prop.ok = Just False,
+                                             Prop.reason = show x }
+  property (Right x) = property x
+  exhaustive _ = True
+
+-- 'System' is tested through arbitrary states and environments.
+instance (Testable prop) => Testable (System prop) where
+  property action = property $ \env state -> evalSystem env state action
+    
+-- |Newtype for generating valid addresses.
+newtype Address = Address { getAddress :: Word16 }
+                deriving (Eq, Show, Ord)
+
+instance Arbitrary Address where
+  arbitrary = Address <$> readableAddress
 
 -- |Generates a valid readable (but not necessarily writable) memory address.
 readableAddress :: Gen Word16
@@ -104,9 +133,28 @@ invalidArea = oneof [invalidStart, invalidEnd]
           end <- invalidAddress
           return (start, end - start)
 
+-- |Newtype for generating valid program counters with a step margin of 1.
+newtype PC = PC { getProgramCounter :: Word16 }
+           deriving (Eq, Show, Ord)
+
+instance Arbitrary PC where
+  arbitrary = PC <$> pcWithStepMargin 1
+
 -- |Generates a valid program counter.
 validPC :: Gen Word16
 validPC = readableAddress `suchThat` even
+
+-- |Generates a program counter such that N steps can be taken without error (i.e. without yielding a
+-- PC outside the memory bounds).
+pcWithStepMargin :: Word16 -> Gen Word16
+pcWithStepMargin n = validPC `suchThat` (< memorySize - fromIntegral n * 2)
+
+-- |Newtype for generating valid register indexes.
+newtype Reg = Reg { getRegisterIndex :: Word8 }
+            deriving (Eq, Show, Ord)
+
+instance Arbitrary Reg where
+  arbitrary = Reg <$> validRegisterIndex
 
 -- |Generates a valid register index.
 validRegisterIndex :: Gen Word8
@@ -116,12 +164,16 @@ validRegisterIndex = choose (0, numRegisters - 1)
 invalidRegisterIndex :: Gen Word8
 invalidRegisterIndex = arbitrary `suchThat` (>= numRegisters)
 
+-- |Checks whether the given action produces an error when run with the given state
+-- and 'Environment'.
 isError :: System a -> Environment -> SystemState -> Bool
 isError sys env state =
   case evalSystem env state sys of
     Left _  -> True
     Right _ -> False
 
+-- |Checks whether the given action produces a state equal to the input state
+-- when run with the given 'Environment' and 'SystemState'.
 isNonMutating :: System a -> Environment -> SystemState -> Bool
 isNonMutating sys env state = Right state == execSystem env state sys
 
@@ -129,8 +181,10 @@ spec :: Spec
 spec = do
   describe "getMem" $ do
     prop "returns what was written by setMem" $
-      forAll writableAddress $ \addr x env state ->
-        evalSystem env state (setMem addr x >> getMem addr) == Right x
+      forAll writableAddress $ \addr x ->
+        do setMem addr x
+           x' <- getMem addr
+           return $ x' == x
 
     prop "fails for invalid memory addresses" $
       forAll invalidAddress $ \addr -> isError $ getMem addr
@@ -215,8 +269,10 @@ spec = do
       forAll invalidRegisterIndex $ \index x -> isError $ setReg index x
 
     prop "getReg returns what was written" $
-      forAll validRegisterIndex $ \index x env state ->
-        evalSystem env state (setReg index x >> getReg index) == Right x
+      forAll validRegisterIndex $ \index x ->
+        do setReg index x
+           x' <- getReg index
+           return $ x' == x
 
     prop "only changes the given index" $
       forAll validRegisterIndex $ \index x ->
@@ -231,7 +287,9 @@ spec = do
 
   describe "setRegI" $ do
     prop "getRegI returns what was set" $
-      \x env state -> evalSystem env state (setRegI x >> getRegI) == Right x
+      \x -> do setRegI x
+               x' <- getRegI
+               return $ x == x'
 
     prop "only changes the program I register" $
       \x -> isNonMutating $ do
@@ -251,8 +309,10 @@ spec = do
       forAll (invalidAddress `suchThat` even) $ \addr -> isError $ setPC addr
 
     prop "getPC returns what was set" $
-      forAll validPC $ \addr env state ->
-        evalSystem env state (setPC addr >> getPC) == Right addr
+      forAll validPC $ \addr -> do setPC addr
+                                   x <- getPC
+                                   return $ x == addr
+                                     
 
     prop "only changes the PC" $
       forAll validPC $ \addr ->
@@ -261,22 +321,24 @@ spec = do
           setPC addr
           setPC old
 
-  describe "stepPC" $
+  describe "stepPC" $ do
     prop "increases PC by 2" $
-      \env state -> let pc = programCounter state
-                    in (pc <= memorySize - 4) ==>
-                         evalSystem env state (stepPC >> getPC) == Right (pc + 2)
+      do pc <- getPC
+         stepPC
+         pc' <- getPC
+         return $ pc' == (pc + 2)
+
+    prop "fails if at last instruction" $
+      isError $ setPC (memorySize - 2) >> stepPC
   
   describe "pop" $ do
     prop "pop fails on empty stack" $
       \env -> isError pop env initialSystemState
               
     prop "pop returns elements in the reverse order they were pushed" $
-      \elems env state ->
-        let popped = evalSystem env state $ do
-              mapM_ push elems
-              replicateM (length elems) pop
-        in popped == Right (reverse elems)
+      \elems -> do mapM_ push elems
+                   popped <- replicateM (length elems) pop
+                   return $ popped == reverse elems
       
   describe "clearDisplay" $
     prop "makes the screen black" $
