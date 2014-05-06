@@ -132,6 +132,13 @@ parseInstruction word =
 execInstruction :: Instruction -> System ()
 execInstruction (Instruction _ system) = system
 
+-- |Applies the given binary operator to the given registers and stores the result
+-- in the first register. Steps the PC by one.
+liftRegReg :: (Word8 -> Word8 -> Word8) -> Word8 -> Word8 -> System ()
+liftRegReg f regx regy = do result <- f <$> getReg regx <*> getReg regy
+                            setReg regx result
+                            stepPC                            
+
 sys :: Word16 -> Instruction
 sys addr = Instruction (InstructionInfo "SYS" [Addr addr]) exec
   where exec = systemException "SYS instruction is not allowed"
@@ -189,50 +196,70 @@ ldRegReg regx regy = Instruction (InstructionInfo "LD" [Reg regx, Reg regy]) exe
   
 orRegReg :: Word8 -> Word8 -> Instruction
 orRegReg regx regy = Instruction (InstructionInfo "OR" [Reg regx, Reg regy]) exec
-  where exec = do x <- getReg regx
-                  y <- getReg regy
-                  setReg regx (x .|. y)
-                  stepPC
+  where exec = liftRegReg (.|.) regx regy
 
 andRegReg :: Word8 -> Word8 -> Instruction
 andRegReg regx regy = Instruction (InstructionInfo "AND" [Reg regx, Reg regy]) exec
-  where exec = undefined
+  where exec = liftRegReg (.&.) regx regy
 
 xorRegReg :: Word8 -> Word8 -> Instruction
 xorRegReg regx regy = Instruction (InstructionInfo "XOR" [Reg regx, Reg regy]) exec
-  where exec = undefined
+  where exec = liftRegReg xor regx regy
 
 addRegReg :: Word8 -> Word8 -> Instruction
 addRegReg regx regy = Instruction (InstructionInfo "ADD" [Reg regx, Reg regy]) exec
-  where exec = undefined
+  where exec = do x <- getReg regx
+                  y <- getReg regy
+                  let z = fromIntegral x + fromIntegral y :: Word16
+                  setReg regx $ fromIntegral z
+                  setReg 0xF $ if z > 255 then 1 else 0
+                  stepPC
 
 subRegReg :: Word8 -> Word8 -> Instruction
 subRegReg regx regy = Instruction (InstructionInfo "SUB" [Reg regx, Reg regy]) exec
-  where exec = undefined
+  where exec = do x <- getReg regx
+                  y <- getReg regy
+                  setReg regx $ x - y
+                  setReg 0xF $ if x < y then 0 else 1
+                  stepPC
 
 shr :: Word8 -> Word8 -> Instruction
 shr regx regy = Instruction (InstructionInfo "SHR" [Reg regx, Reg regy]) exec
-  where exec = undefined
+  where exec = do x <- getReg regx
+                  setReg regx $ shiftR x 1
+                  setReg 0xF $ if testBit x 0 then 1 else 0
+                  stepPC
 
 subnRegReg :: Word8 -> Word8 -> Instruction
 subnRegReg regx regy = Instruction (InstructionInfo "SUBN" [Reg regx, Reg regy]) exec
-  where exec = undefined
+  where exec = do x <- getReg regx
+                  y <- getReg regy
+                  setReg regx $ y - x
+                  setReg 0xF $ if y < x then 0 else 1
+                  stepPC
 
 shl :: Word8 -> Word8 -> Instruction
 shl regx regy = Instruction (InstructionInfo "SHL" [Reg regx, Reg regy]) exec
-  where exec = undefined
+  where exec = do x <- getReg regx
+                  setReg regx $ shiftL x 1
+                  setReg 0xF $ if testBit x 7 then 1 else 0
+                  stepPC
 
 sneRegReg :: Word8 -> Word8 -> Instruction
 sneRegReg regx regy = Instruction (InstructionInfo "SNE" [Reg regx, Reg regy]) exec
-  where exec = undefined
+  where exec = do x <- getReg regx
+                  y <- getReg regy
+                  when (x /= y) stepPC
+                  stepPC
 
 ldIAddr :: Word16 -> Instruction
 ldIAddr addr = Instruction (InstructionInfo "LD" [RegI, Addr addr]) exec
-  where exec = undefined
+  where exec = setRegI addr >> stepPC
 
 jpV0Addr :: Word16 -> Instruction
 jpV0Addr addr = Instruction (InstructionInfo "JP" [Reg 0, Addr addr]) exec
-  where exec = undefined
+  where exec = do x <- getReg 0
+                  setPC $ addr + fromIntegral x
 
 rnd :: Word8 -> Word8 -> Instruction
 rnd reg mask = Instruction (InstructionInfo "RND" [Reg reg, Byte mask]) exec

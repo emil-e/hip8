@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Hip8.SystemSpec (
   anyKey,
 
@@ -77,7 +78,7 @@ instance (Testable prop) => Testable (System prop) where
     
 -- |Newtype for generating valid addresses.
 newtype Address = Address { getAddress :: Word16 }
-                deriving (Eq, Show, Ord)
+                deriving (Eq, Show, Ord, Num)
 
 instance Arbitrary Address where
   arbitrary = Address <$> readableAddress
@@ -135,7 +136,7 @@ invalidArea = oneof [invalidStart, invalidEnd]
 
 -- |Newtype for generating valid program counters with a step margin of 1.
 newtype PC = PC { getProgramCounter :: Word16 }
-           deriving (Eq, Show, Ord)
+           deriving (Eq, Show, Ord, Num)
 
 instance Arbitrary PC where
   arbitrary = PC <$> pcWithStepMargin 1
@@ -151,7 +152,7 @@ pcWithStepMargin n = validPC `suchThat` (< memorySize - fromIntegral n * 2)
 
 -- |Newtype for generating valid register indexes.
 newtype Reg = Reg { getRegisterIndex :: Word8 }
-            deriving (Eq, Show, Ord)
+            deriving (Eq, Show, Ord, Num)
 
 instance Arbitrary Reg where
   arbitrary = Reg <$> validRegisterIndex
