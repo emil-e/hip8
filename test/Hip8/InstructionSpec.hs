@@ -108,7 +108,7 @@ spec = do
       parseInstruction 0xFA55 `shouldBe` Just (ldMemRegs 0xA)
     it "parses LD Vx, [I]" $
       parseInstruction 0xFA65 `shouldBe` Just (ldRegsMem 0xA)
-      
+
     prop "never parses different words to same instruction" $
       \w1 w2 -> (w1 /= w2) ==>
         let i1 = parseInstruction w1
@@ -160,27 +160,27 @@ spec = do
 
   describe "seRegByte" $ do
     prop "steps PC by one if register not equal to immediate" $
-      \env state (Reg reg) byte -> 
+      \env state (Reg reg) byte ->
         byte /= register state reg ==>
           stepsPCBy 1 (execInstruction $ seRegByte reg byte) env state
 
     prop "steps PC by two if register equal to immediate" $
-      \(Reg reg) byte -> 
+      \(Reg reg) byte ->
         stepsPCBy 2 (setReg reg byte >> execInstruction (seRegByte reg byte))
 
   describe "sneRegByte" $ do
     prop "steps PC by two if register not equal to immediate" $
-      \env state (Reg reg) byte -> 
+      \env state (Reg reg) byte ->
         byte /= register state reg ==>
           stepsPCBy 2 (execInstruction $ sneRegByte reg byte) env state
 
     prop "steps PC by one if register equal to immediate" $
-      \(Reg reg) byte -> 
+      \(Reg reg) byte ->
         stepsPCBy 1 $ setReg reg byte >> execInstruction (sneRegByte reg byte)
 
   describe "seRegReg" $ do
     prop "steps PC by one if register not equal to immediate" $
-      \env state (Reg regx) (Reg regy) -> 
+      \env state (Reg regx) (Reg regy) ->
         register state regx /= register state regy ==>
           stepsPCBy 1 (execInstruction $ seRegReg regx regy) env state
 
@@ -279,12 +279,12 @@ spec = do
       \regx regy ->
         regx /= 0xF ==>
           checkRegReg regx regy regx shr $ \x _ -> shiftR x 1
-                                                   
+
     prop "doesn't change Vy unless Vy is Vx or VF" $
       \regx regy ->
         (regy /= 0xF) && (regy /= regx) ==>
           checkRegReg regx regy regy shr $ \_ y -> y
-  
+
     prop "sets VF to 1 if LSB is set" $
       \regx regy -> checkRegReg regx regy 0xF shr $ \x _ ->
         if testBit x 0 then 1 else 0
@@ -327,7 +327,7 @@ spec = do
 
   describe "sneRegReg" $ do
     prop "steps PC by two if register not equal to immediate" $
-      \env state (Reg regx) (Reg regy) -> 
+      \env state (Reg regx) (Reg regy) ->
         register state regx /= register state regy ==>
           stepsPCBy 2 (execInstruction $ sneRegReg regx regy) env state
 
@@ -347,7 +347,7 @@ spec = do
       \(Address addr) -> stepsPCBy 1 $ execInstruction (ldIAddr addr)
 
   describe "jpV0Addr" $
-    prop "sets PC to V0 plus the immediate value" $ 
+    prop "sets PC to V0 plus the immediate value" $
       let pre (Address a, x) = dest < memorySize && even dest
             where dest = a + fromIntegral x
       in forAll (arbitrary `suchThat` pre) $ \(Address addr, x) -> do
@@ -355,6 +355,3 @@ spec = do
         execInstruction $ jpV0Addr addr
         pc <- getPC
         return $ pc == fromIntegral (addr + fromIntegral x)
-          
-           
-                            

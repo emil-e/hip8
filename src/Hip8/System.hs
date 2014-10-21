@@ -63,7 +63,7 @@ data Environment = Environment Float (Maybe Word8)
 -- |Describes a value set at a particular time for the sound timer or delay timer.
 data TimerSetting = NotSet | Set Float Word8
                   deriving (Eq, Show)
-  
+
 -- |Describes the state of the system including the CPU and the display.
 data SystemState = SystemState {
   -- |The main memory vector
@@ -148,8 +148,8 @@ newtype System a = System (StateT (Environment, SystemState) (Either SystemExcep
 -- error.
 runSystem :: Environment
           -> SystemState
-          -> System a   
-          -> Either SystemException (a, SystemState) 
+          -> System a
+          -> Either SystemException (a, SystemState)
 runSystem env s (System sys) =
   case ret of
     Right (x, (_, s')) -> Right (x, s')
@@ -201,7 +201,7 @@ setMem addr value = do
     systemException (printf "Read-only memory at 0x%X" addr)
   unless (addr < memorySize) $
     systemException (printf "Invalid memory write at 0x%X" addr)
-    
+
   modifySystemState $ \st ->
     st { _mainMemory = let index = fromIntegral addr
                       in Vector.modify
@@ -227,7 +227,7 @@ writeMem addr bytes = do
     systemException (printf "Write begins on read-only address 0x%X" addr)
   unless (endAddr <= memorySize) $
     systemException (printf "Write ends on invalid memory address: 0x%X" endAddr)
-    
+
   modifySystemState $ \st ->
     st { _mainMemory = Vector.modify
                         (\v -> Vector.copy (MVector.slice index len v) bytes)
@@ -241,7 +241,7 @@ readMem addr len = do
   let endAddr = addr + len
   unless (endAddr <= memorySize) $
     systemException (printf "Read ends on invalid memory address 0x%X" endAddr)
-    
+
   st <- getSystemState
   return $ Vector.slice (fromIntegral addr) (fromIntegral len) (_mainMemory st)
 
@@ -309,4 +309,3 @@ pop = do
 -- |Clears the display.
 clearDisplay :: System ()
 clearDisplay = modifySystemState $ \st -> st { _displayBuffer = initialDisplay }
-                

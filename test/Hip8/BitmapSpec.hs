@@ -83,7 +83,7 @@ spec = do
       \bitmap (Positive x) (Positive y) (Positive nx) (Positive ny) ->
         let (width, height) = Bitmap.dimensions bitmap
         in Bitmap.pixelAt bitmap (x + nx * width, y + ny * height) == Bitmap.pixelAt bitmap (x, y)
-  
+
   describe "setPixelAt" $ do
     prop "Bitmap.pixelAt returns what Bitmap.setPixelAt set" $
       \(Positive x) (Positive y) disp p ->
@@ -94,7 +94,7 @@ spec = do
       forAll blackBitmap $ \bitmap ->
         let (width, height) = Bitmap.dimensions bitmap
         in Bitmap.pixelAt (Bitmap.setPixelAt bitmap (x + nx * width, y + ny * height) True) (x, y)
-            
+
 
   describe "blit" $ do
     prop "correct placement of single pixel" $

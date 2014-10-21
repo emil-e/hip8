@@ -41,7 +41,7 @@ instance Alternative (BitParser w) where
 maskBits :: (Bits a) => Int -> a -> a
 maskBits 0 x = complement x .&. x
 maskBits n x = x .&. shiftR (complement x .|. x) (bitSize x - n)
-  where 
+  where
 
 -- |Runs the given parser with the specified data
 runParser :: Int           -- ^The number of bits remaining in the data
@@ -93,4 +93,3 @@ assertEqBits :: (Bits w) => Int -> w -> BitParser w ()
 assertEqBits n x = do
   bits <- getBits n
   when (bits /= x) failParse
-  

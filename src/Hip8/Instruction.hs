@@ -67,7 +67,7 @@ data PseudoArg = Addr Word16
                | BCD
                | Key
                deriving (Show, Eq)
-                      
+
 -- |Information about an instruction.
 data InstructionInfo = InstructionInfo String [PseudoArg]
                      deriving (Show, Eq)
@@ -84,7 +84,7 @@ instance Eq Instruction where
 
 parseInstruction :: Word16 -> Maybe Instruction
 parseInstruction word =
-  runParser 16 word 
+  runParser 16 word
      $  const16 0x00E0 *> pure cls
     <|> const16 0x00EE *> pure ret
     <|> const4 0x0 *> (sys <$> addr)
@@ -137,7 +137,7 @@ execInstruction (Instruction _ system) = system
 liftRegReg :: (Word8 -> Word8 -> Word8) -> Word8 -> Word8 -> System ()
 liftRegReg f regx regy = do result <- f <$> getReg regx <*> getReg regy
                             setReg regx result
-                            stepPC                            
+                            stepPC
 
 sys :: Word16 -> Instruction
 sys addr = Instruction (InstructionInfo "SYS" [Addr addr]) exec
@@ -154,17 +154,17 @@ ret = Instruction (InstructionInfo "RET" []) exec
 jpAddr :: Word16 -> Instruction
 jpAddr addr = Instruction (InstructionInfo "JP" [Addr addr]) exec
   where exec = setPC addr
-  
+
 callAddr :: Word16 -> Instruction
 callAddr addr = Instruction (InstructionInfo  "CALL" [Addr addr]) exec
   where exec = getPC >>= push >> setPC addr
-  
+
 seRegByte :: Word8 -> Word8 -> Instruction
 seRegByte reg byte = Instruction (InstructionInfo "SE" [Reg reg, Byte byte]) exec
   where exec = do x <- getReg reg
                   when (x == byte) stepPC
                   stepPC
-  
+
 sneRegByte :: Word8 -> Word8 -> Instruction
 sneRegByte reg byte = Instruction (InstructionInfo "SNE" [Reg reg, Byte byte]) exec
   where exec = do x <- getReg reg
@@ -177,7 +177,7 @@ seRegReg regx regy = Instruction (InstructionInfo "SE" [Reg regx, Reg regy]) exe
                   y <- getReg regy
                   when (x == y) stepPC
                   stepPC
-  
+
 ldRegByte :: Word8 -> Word8 -> Instruction
 ldRegByte reg byte = Instruction (InstructionInfo "LDI" [Reg reg, Byte byte]) exec
   where exec = setReg reg byte >> stepPC
@@ -187,13 +187,13 @@ addRegByte reg byte = Instruction (InstructionInfo "ADDI" [Reg reg, Byte byte]) 
   where exec = do x <- getReg reg
                   setReg reg $ x + byte
                   stepPC
-  
+
 ldRegReg :: Word8 -> Word8 -> Instruction
 ldRegReg regx regy = Instruction (InstructionInfo "LD" [Reg regx, Reg regy]) exec
   where exec = do y <- getReg regy
                   setReg regx y
                   stepPC
-  
+
 orRegReg :: Word8 -> Word8 -> Instruction
 orRegReg regx regy = Instruction (InstructionInfo "OR" [Reg regx, Reg regy]) exec
   where exec = liftRegReg (.|.) regx regy

@@ -29,7 +29,7 @@ spec = do
     prop "leaves correct number of bits" $
       forAll bitRange $ \n ->
       popCount (maskBits n (0xFFFFFFFF :: Word32)) == n
-        
+
   describe "peekBits" $ do
     prop "fails if there are not enough bits left" $
       forAll invalidBitRequest $ \(n, r) ->
@@ -72,7 +72,7 @@ spec = do
     prop "fails if there are not enough bits left" $
       forAll invalidBitRequest $ \(n, r) ->
       isNothing $ runParser r (0 :: Word32) $ assertEqBits n 0
-      
+
     prop "fails on inequality" $
       forAll (bitRange `suchThat` (>0)) $ \n a b ->
         (b /= shiftR a (32 - n)) ==> isNothing $ runParser 32 (a :: Word32) (assertEqBits n b)
@@ -84,7 +84,7 @@ spec = do
   describe "<|>" $ do
     it "fails if both parsers fail" $
       runParser 32 (0 :: Word32) (failParse <|> failParse) `shouldBe` (Nothing :: Maybe ())
-    
+
     prop "always uses left if right fails" $
       \x -> runParser 32 (x :: Word32) (getBits 32 <|> failParse) == Just x
 
