@@ -346,10 +346,12 @@ spec = do
 
   describe "clearDisplay" $
     prop "makes the screen black" $
-      \env state -> (displayBuffer <$> execSystem env state clearDisplay) == Right initialDisplay
+      \env state -> (displayBuffer <$> execSystem env state clearDisplay)
+                    ==
+                    Right initialDisplay
 
   describe "setRandoms/nextRandom" $ do
     prop "returns the randoms set" $
       \rnds -> do setRandoms rnds
-                  result <- sequence $ replicate (length rnds) nextRandom
+                  result <- replicateM (length rnds) nextRandom
                   return $ result == rnds
