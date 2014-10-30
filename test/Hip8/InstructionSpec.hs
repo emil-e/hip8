@@ -2,11 +2,12 @@ module Hip8.InstructionSpec (Hip8.InstructionSpec.spec) where
 
 import Test.Hspec
 import Test.Hspec.QuickCheck
-import Test.QuickCheck
+import Test.QuickCheck (Property, forAll, arbitrary, suchThat, (==>))
 import Hip8.System
 import Hip8.Instruction
 import Hip8.SystemSpec
 import Data.Maybe
+import Control.Monad
 import Control.Applicative
 import Data.Word
 import Data.Bits
@@ -355,3 +356,29 @@ spec = do
         execInstruction $ jpV0Addr addr
         pc <- getPC
         return $ pc == fromIntegral (addr + fromIntegral x)
+
+  describe "rnd" $ do
+    prop "pops off a random value, one at a time" $
+      \randoms -> do
+        setRandoms randoms
+        actual <- replicateM (length randoms) $ do
+          setPC 0
+          execInstruction $ rnd 0 0xFF
+          getReg 0
+        return $ actual == randoms
+
+    prop "writes the value to the given register" $
+      \value (Reg reg) -> do
+        setRandoms [value]
+        execInstruction $ rnd reg 0xFF
+        (value ==) <$> getReg reg
+
+    prop "ANDs the byte with the random" $
+      \value mask (Reg reg) -> do
+        setRandoms [value]
+        execInstruction $ rnd reg mask
+        x <- getReg reg
+        return $ (complement mask .&. x) == 0
+
+    prop "steps PC by one" $
+      \(Reg reg) mask -> stepsPCBy 1 $ execInstruction (rnd reg mask)

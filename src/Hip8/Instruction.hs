@@ -263,7 +263,7 @@ jpV0Addr addr = Instruction (InstructionInfo "JP" [Reg 0, Addr addr]) exec
 
 rnd :: Word8 -> Word8 -> Instruction
 rnd reg mask = Instruction (InstructionInfo "RND" [Reg reg, Byte mask]) exec
-  where exec = undefined
+  where exec = (mask .&.) <$> nextRandom >>= setReg reg >> stepPC
 
 drw :: Word8 -> Word8 -> Word8 -> Instruction
 drw xreg yreg n  = Instruction (InstructionInfo "DRW" [Reg xreg, Reg yreg, Nibble n]) exec
