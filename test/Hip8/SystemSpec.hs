@@ -20,7 +20,7 @@ module Hip8.SystemSpec (
   Reg(..),
   validRegisterIndex,
   invalidRegisterIndex,
-  
+
   Hip8.SystemSpec.spec,
   isError,
   isNonMutating
@@ -37,6 +37,7 @@ import qualified Data.Vector.Generic as Vector
 import Control.Applicative
 import Control.Monad
 import Data.Word
+import System.Random
 
 instance Arbitrary Environment where
   arbitrary = Environment
@@ -56,6 +57,7 @@ instance Arbitrary SystemState where
     pc <- pcWithStepMargin 1
     env <- arbitrary
     disp <- bitmapWithSize displaySize
+    rnds <- randoms <$> mkStdGen <$> arbitrary
 
     let (Right state) = execSystem env initialSystemState $ do
           writeMem userMemoryStart mem
@@ -63,6 +65,7 @@ instance Arbitrary SystemState where
           setRegI regi
           forM_ stk push
           setPC pc
+          setRandoms rnds
     return state
 
 -- Make 'Either' testable
@@ -75,7 +78,7 @@ instance (Testable prop, Show a) => Testable (Either a prop) where
 -- 'System' is tested through arbitrary states and environments.
 instance (Testable prop) => Testable (System prop) where
   property action = property $ \env state -> evalSystem env state action
-    
+
 -- |Newtype for generating valid addresses.
 newtype Address = Address { getAddress :: Word16 }
                 deriving (Eq, Show, Ord, Num)
@@ -246,12 +249,12 @@ spec = do
     prop "empty write leaves state unchanged" $
       forAll writableAddress $ \addr ->
         isNonMutating $ writeMem addr Vector.empty
-    
+
     let shouldFailForArea area =
           forAll area $ \(addr, len) ->
           forAll (dataVector $ fromIntegral len) $ \vec ->
             isError $ writeMem addr vec
-    
+
     prop "fails for invalid ranges" $
       shouldFailForArea invalidArea
 
@@ -313,7 +316,7 @@ spec = do
       forAll validPC $ \addr -> do setPC addr
                                    x <- getPC
                                    return $ x == addr
-                                     
+
 
     prop "only changes the PC" $
       forAll validPC $ \addr ->
@@ -331,16 +334,22 @@ spec = do
 
     prop "fails if at last instruction" $
       isError $ setPC (memorySize - 2) >> stepPC
-  
+
   describe "pop" $ do
     prop "pop fails on empty stack" $
       \env -> isError pop env initialSystemState
-              
+
     prop "pop returns elements in the reverse order they were pushed" $
       \elems -> do mapM_ push elems
                    popped <- replicateM (length elems) pop
                    return $ popped == reverse elems
-      
+
   describe "clearDisplay" $
     prop "makes the screen black" $
       \env state -> (displayBuffer <$> execSystem env state clearDisplay) == Right initialDisplay
+
+  describe "setRandoms/nextRandom" $ do
+    prop "returns the randoms set" $
+      \rnds -> do setRandoms rnds
+                  result <- sequence $ replicate (length rnds) nextRandom
+                  return $ result == rnds

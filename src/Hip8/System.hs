@@ -41,7 +41,9 @@ module Hip8.System (
   stepPC,
   push,
   pop,
-  clearDisplay
+  clearDisplay,
+  setRandoms,
+  nextRandom
   ) where
 
 import Hip8.Bitmap (Bitmap)
@@ -64,6 +66,14 @@ data Environment = Environment Float (Maybe Word8)
 data TimerSetting = NotSet | Set Float Word8
                   deriving (Eq, Show)
 
+-- |Newtype around list to ensure not displaying all elements.
+newtype Infinite a = Infinite [a]
+
+instance (Show a) => Show (Infinite a) where
+  show (Infinite lst) = case (splitAt 10 lst) of
+                         (x, []) -> show x
+                         (x, _) -> show x ++ "..."
+
 -- |Describes the state of the system including the CPU and the display.
 data SystemState = SystemState {
   -- |The main memory vector
@@ -81,8 +91,20 @@ data SystemState = SystemState {
   -- |The sound timer setting
   _soundTimerSetting :: TimerSetting,
   -- |The display buffer.
-  _displayBuffer :: Bitmap
-  } deriving (Eq, Show)
+  _displayBuffer :: Bitmap,
+  -- |A list of random numbers which acts as the random source of the system.
+  _randoms :: Infinite Word8
+  } deriving (Show)
+
+instance Eq SystemState where
+  s1 == s2 = (_mainMemory s1 == _mainMemory s2) &&
+             (_registers s1 == _registers s2) &&
+             (_registerI s1 == _registerI s2) &&
+             (_stack s1 == _stack s2) &&
+             (_programCounter s1 == _programCounter s2) &&
+             (_delayTimerSetting s1 == _delayTimerSetting s2) &&
+             (_soundTimerSetting s1 == _soundTimerSetting s2) &&
+             (_displayBuffer s1 == _displayBuffer s2)
 
 -- |Returns the value of the register with the given index for the given 'SystemState'.
 register :: SystemState -> Word8 -> Word8
@@ -124,7 +146,8 @@ initialSystemState = SystemState {
   _programCounter = userMemoryStart,
   _delayTimerSetting = NotSet,
   _soundTimerSetting = NotSet,
-  _displayBuffer = initialDisplay
+  _displayBuffer = initialDisplay,
+  _randoms = Infinite $ repeat 0
   }
 
 -- |The Chip-8 standard display dimensions.
@@ -309,3 +332,18 @@ pop = do
 -- |Clears the display.
 clearDisplay :: System ()
 clearDisplay = modifySystemState $ \st -> st { _displayBuffer = initialDisplay }
+
+-- |Sets the source of random numbers.
+setRandoms :: [Word8] -> System ()
+setRandoms randoms = modifySystemState $ \st ->
+  st { _randoms = Infinite randoms }
+
+-- |Returns the next random number.
+nextRandom :: System Word8
+nextRandom = do
+  st <- getSystemState
+  let (Infinite randoms) = _randoms st
+  when (null randoms) $ systemException "Out of randoms"
+  let (next:remaining) = randoms
+  putSystemState $ st { _randoms = Infinite remaining }
+  return next
