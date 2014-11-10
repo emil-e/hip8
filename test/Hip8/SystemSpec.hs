@@ -374,7 +374,3 @@ spec = do
       \rnds -> do setRandoms rnds
                   result <- replicateM (length rnds) nextRandom
                   return $ result == rnds
-
-  describe "getKey" $
-    prop "returns the key from the environment" $
-      \state t key -> evalSystem (Environment t key) state getKey == Right key

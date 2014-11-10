@@ -283,14 +283,14 @@ drw xreg yreg n  = Instruction (InstructionInfo "DRW" [Reg xreg, Reg yreg, Nibbl
 
 skp :: Word8 -> Instruction
 skp reg = Instruction (InstructionInfo "SKP" [Reg reg]) exec
-  where exec = do key <- getKey
+  where exec = do (Environment _ key) <- getEnvironment
                   x <- getReg reg
                   when (key == Just x) stepPC
                   stepPC
 
 sknp :: Word8 -> Instruction
 sknp reg = Instruction (InstructionInfo "SKNP" [Reg reg]) exec
-  where exec = do key <- getKey
+  where exec = do (Environment _ key) <- getEnvironment
                   x <- getReg reg
                   when (key /= Just x) stepPC
                   stepPC

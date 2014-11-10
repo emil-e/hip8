@@ -44,8 +44,7 @@ module Hip8.System (
   blit,
   clearDisplay,
   setRandoms,
-  nextRandom,
-  getKey
+  nextRandom
   ) where
 
 import Hip8.Bitmap (Bitmap)
@@ -355,7 +354,3 @@ nextRandom = do
    (next:rest) -> do
      putSystemState $ st { _randoms = Infinite rest }
      return next
-
--- |Returns the currently pressed key, if any.
-getKey :: System (Maybe Word8)
-getKey = getEnvironment >>= \(Environment _ key) -> return key
