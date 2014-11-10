@@ -19,6 +19,7 @@ module Hip8.Bitmap (
   toString,
   blit,
   numWhitePixels,
+  lift,
   isNull
   ) where
 
@@ -135,6 +136,13 @@ blit dest@(Bitmap (dw, dh) dbuf) (Bitmap (sw, sh) sbuf) (ox, oy)
 -- |Returns the number of white pixels in the given 'Bitmap'.
 numWhitePixels :: Bitmap -> Int
 numWhitePixels (Bitmap _ buf) = Vector.sum $ Vector.map popCount buf
+
+-- |Lifts a function that combine two 'Word8's to a function which combines two
+-- bitmaps.
+lift :: (Word8 -> Word8 -> Word8) -> Bitmap -> Bitmap -> Bitmap
+lift f (Bitmap s1 b1) (Bitmap s2 b2)
+  | s1 /= s2 = error "Non-matching bitmap sizes"
+  | otherwise = Bitmap s1 $ Vector.zipWith f b1 b2
 
 -- |Returns 'True' if the given bitmap has non-zero width and height,
 isNull :: Bitmap -> Bool

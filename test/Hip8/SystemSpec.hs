@@ -2,6 +2,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Hip8.SystemSpec (
   anyKey,
+  sprite,
 
   Address(..),
   readableAddress,
@@ -29,6 +30,8 @@ module Hip8.SystemSpec (
 import Hip8.System
 import Hip8.Generators
 import Hip8.BitmapSpec
+import Hip8.Bitmap (Bitmap)
+import qualified Hip8.Bitmap as Bitmap
 import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck
@@ -48,6 +51,10 @@ instance Arbitrary Environment where
 anyKey :: Gen Word8
 anyKey = choose (0x0, 0xF)
 
+-- |Generates a bitmap which is smaller than the display.
+sprite :: Gen Bitmap
+sprite = smallerBitmap initialDisplay
+
 instance Arbitrary SystemState where
   arbitrary = do
     mem <- dataVector $ fromIntegral (memorySize - userMemoryStart)
@@ -66,6 +73,7 @@ instance Arbitrary SystemState where
           forM_ stk push
           setPC pc
           setRandoms rnds
+          blit disp (0, 0)
     return state
 
 -- Make 'Either' testable
@@ -344,9 +352,20 @@ spec = do
                    popped <- replicateM (length elems) pop
                    return $ popped == reverse elems
 
+  describe "blit" $
+    prop "blits the given bitmap to the display" $
+      forAll sprite $ \bitmap (Positive x, Positive y) ->
+       do st <- getSystemState
+          blit bitmap (x, y)
+          st' <- getSystemState
+          return $
+            display st'
+            ==
+            Bitmap.blit (display st) bitmap (x, y)
+
   describe "clearDisplay" $
     prop "makes the screen black" $
-      \env state -> (displayBuffer <$> execSystem env state clearDisplay)
+      \env state -> (display <$> execSystem env state clearDisplay)
                     ==
                     Right initialDisplay
 

@@ -12,7 +12,7 @@ module Hip8.System (
   register,
   stack,
   programCounter,
-  displayBuffer,
+  display,
   memorySize,
   numRegisters,
   userMemoryStart,
@@ -41,6 +41,7 @@ module Hip8.System (
   stepPC,
   push,
   pop,
+  blit,
   clearDisplay,
   setRandoms,
   nextRandom
@@ -91,7 +92,7 @@ data SystemState = SystemState {
   -- |The sound timer setting
   _soundTimerSetting :: TimerSetting,
   -- |The display buffer.
-  _displayBuffer :: Bitmap,
+  _display :: Bitmap,
   -- |A list of random numbers which acts as the random source of the system.
   _randoms :: Infinite Word8
   } deriving (Show)
@@ -104,7 +105,7 @@ instance Eq SystemState where
              (_programCounter s1 == _programCounter s2) &&
              (_delayTimerSetting s1 == _delayTimerSetting s2) &&
              (_soundTimerSetting s1 == _soundTimerSetting s2) &&
-             (_displayBuffer s1 == _displayBuffer s2)
+             (_display s1 == _display s2)
 
 -- |Returns the value of the register with the given index for the given 'SystemState'.
 register :: SystemState -> Word8 -> Word8
@@ -121,8 +122,8 @@ programCounter :: SystemState -> Word16
 programCounter = _programCounter
 
 -- |Returns the display buffer of the given 'SystemState'.
-displayBuffer :: SystemState -> Bitmap
-displayBuffer = _displayBuffer
+display :: SystemState -> Bitmap
+display = _display
 
 -- |The memory size of the Chip-8 system
 memorySize :: Word16
@@ -146,7 +147,7 @@ initialSystemState = SystemState {
   _programCounter = userMemoryStart,
   _delayTimerSetting = NotSet,
   _soundTimerSetting = NotSet,
-  _displayBuffer = initialDisplay,
+  _display = initialDisplay,
   _randoms = Infinite $ repeat 0
   }
 
@@ -329,9 +330,14 @@ pop = do
   putSystemState $ st { _stack = newStack }
   return ret
 
+-- |Blits the given 'Bitmap' to the display at the given coordinates.
+blit :: Bitmap -> (Int, Int) -> System ()
+blit bm pos = do
+  modifySystemState $ \st -> st { _display = Bitmap.blit (_display st) bm pos }
+
 -- |Clears the display.
 clearDisplay :: System ()
-clearDisplay = modifySystemState $ \st -> st { _displayBuffer = initialDisplay }
+clearDisplay = modifySystemState $ \st -> st { _display = initialDisplay }
 
 -- |Sets the source of random numbers.
 setRandoms :: [Word8] -> System ()

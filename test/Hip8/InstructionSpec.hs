@@ -2,10 +2,17 @@ module Hip8.InstructionSpec (Hip8.InstructionSpec.spec) where
 
 import Test.Hspec
 import Test.Hspec.QuickCheck
-import Test.QuickCheck (Property, forAll, arbitrary, suchThat, (==>))
+import Test.QuickCheck (Property,
+                        forAll,
+                        arbitrary,
+                        suchThat,
+                        (==>),
+                        choose)
 import Hip8.System
 import Hip8.Instruction
+import qualified Hip8.Bitmap as Bitmap
 import Hip8.SystemSpec
+import Hip8.BitmapSpec
 import Data.Maybe
 import Control.Monad
 import Control.Applicative
@@ -122,7 +129,9 @@ spec = do
 
   describe "cls" $
     prop "clears the screen" $
-      \env state -> (displayBuffer <$> execSystem env state (execInstruction cls)) == Right initialDisplay
+      \env state -> (display <$> execSystem env state (execInstruction cls))
+                     ==
+                    Right initialDisplay
 
   describe "ret" $ do
     prop "sets the PC to the top of the stack plus one step" $
@@ -382,3 +391,42 @@ spec = do
 
     prop "steps PC by one" $
       \(Reg reg) mask -> stepsPCBy 1 $ execInstruction (rnd reg mask)
+
+  describe "drw" $ do
+    prop "blits the contents of an in-memory sprite" $
+      forAll (choose (0, snd displaySize)) $ \n ->
+      forAll (choose (0, memorySize - fromIntegral n)) $
+        \addr (Reg regx) (Reg regy) -> do
+          disp <- display <$> getSystemState
+          x <- fromIntegral <$> getReg regx
+          y <- fromIntegral <$> getReg regy
+
+          setRegI addr
+          execInstruction $ drw regx regy (fromIntegral n)
+
+          disp' <- display <$> getSystemState
+          spr <- Bitmap.make (8, n) <$> readMem addr (fromIntegral n)
+          return $ disp' == Bitmap.blit disp spr (x, y)
+
+    prop "if any pixel was erased, sets VF to 1" $
+      forAll (choose (0, snd displaySize)) $ \n ->
+      forAll (choose (0, memorySize - fromIntegral n)) $
+        \addr (Reg x) (Reg y) -> do
+          disp <- display <$> getSystemState
+
+          setRegI addr
+          execInstruction $ drw x y (fromIntegral n)
+
+          disp' <- display <$> getSystemState
+          let erased = (not . Bitmap.isBlack) $
+                       Bitmap.lift (\a b -> (a `xor` b) .&. a) disp disp'
+          regF <- getReg 0xF
+          return $ (regF == 1) == erased
+
+    prop "steps PC by one" $
+      forAll (choose (0, snd displaySize)) $ \n ->
+      forAll (choose (0, memorySize - fromIntegral n)) $
+        \addr (Reg regx) (Reg regy) -> stepsPCBy 1 $ do
+          setRegI addr
+          execInstruction $ drw regx regy (fromIntegral n)
+

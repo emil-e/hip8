@@ -49,6 +49,7 @@ module Hip8.Instruction (
 
 import Hip8.BitParser
 import Hip8.System
+import qualified Hip8.Bitmap as Bitmap
 import Control.Applicative
 import Data.Word
 import Control.Monad
@@ -267,7 +268,18 @@ rnd reg mask = Instruction (InstructionInfo "RND" [Reg reg, Byte mask]) exec
 
 drw :: Word8 -> Word8 -> Word8 -> Instruction
 drw xreg yreg n  = Instruction (InstructionInfo "DRW" [Reg xreg, Reg yreg, Nibble n]) exec
-  where exec = undefined
+  where exec = do addr <- getRegI
+                  sprBuf <- readMem addr $ fromIntegral n
+                  x <- fromIntegral <$> getReg xreg
+                  y <- fromIntegral <$> getReg yreg
+                  disp <- display <$> getSystemState
+                  blit (Bitmap.make (8, fromIntegral n) sprBuf) (x, y)
+                  disp' <- display <$> getSystemState
+                  let diff = Bitmap.lift (\a b -> (a `xor` b) .&. a) disp disp'
+                  setReg 0xF $ if Bitmap.isBlack diff
+                                 then 0
+                                 else 1
+                  stepPC
 
 skp :: Word8 -> Instruction
 skp reg = Instruction (InstructionInfo "SKP" [Reg reg]) exec
