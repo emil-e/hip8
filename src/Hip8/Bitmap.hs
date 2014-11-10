@@ -18,7 +18,8 @@ module Hip8.Bitmap (
   setPixelAt,
   toString,
   blit,
-  numWhitePixels
+  numWhitePixels,
+  isNull
   ) where
 
 import Data.Vector.Unboxed (Vector, (!))
@@ -43,9 +44,9 @@ buffer (Bitmap _ buf) = buf
 -- with each bit representing a pixel. The width must be a multiple of 8.
 make :: (Int, Int) -> Vector Word8 -> Bitmap
 make (width, height) vec
+  | width < 0 = error "Width must not be negative"
+  | height < 0 = error "Height must not be negative"
   | (width `rem` 8) /= 0 = error "Width must be divisible by 8"
-  | width <= 0 = error "Width must be >0"
-  | height <= 0 = error "Height must be >0"
   | Vector.length vec /= n = error $ "Wrong number of elements in vector, should be " ++ show n
   | otherwise = Bitmap (width, height) vec
   where n = (width `quot` 8) * height
@@ -57,29 +58,34 @@ black (width, height) = make (width, height) $ Vector.replicate n 0
 
 -- |Returns true if the given bitmap is black.
 isBlack :: Bitmap -> Bool
-isBlack (Bitmap _ buf) = Vector.all (== 0) buf
+isBlack bitmap@(Bitmap _ buf) =
+  isNull bitmap || Vector.all (== 0) buf
 
 -- |Creates a white bitmap of the given size.
 white :: (Int, Int) -> Bitmap
 white (width, height) = make (width, height) $ Vector.replicate n 0xFF
   where n = (width `quot` 8) * height
 
--- |Returns true if the given bitmap is white.
+-- |Returns true if the given bitmap has only white pixels.
 isWhite :: Bitmap -> Bool
-isWhite (Bitmap _ buf) = Vector.all (== 0xFF) buf
+isWhite bitmap@(Bitmap _ buf) =
+  (not . isNull) bitmap && Vector.all (== 0xFF) buf
 
 -- |Tests whether the pixel at the given coordinates is set.
 pixelAt :: Bitmap -> (Int, Int) -> Bool
-pixelAt disp@(Bitmap _ buf) c@(x, _) =
-  testBit (buf ! byteOffset disp c) (7 - (x `rem` 8))
+pixelAt bitmap@(Bitmap _ buf) c@(x, _)
+  | isNull bitmap = error "Cannot read from null bitmap"
+  | otherwise = testBit (buf ! byteOffset bitmap c) (7 - (x `rem` 8))
 
 -- |Returns a new 'Bitmap' with the pixel at the given coordinates set to the
 -- specified value.
 setPixelAt :: Bitmap -> (Int, Int) -> Bool -> Bitmap
-setPixelAt disp@(Bitmap dim buf) c@(x, _) set =
-  Bitmap dim $ Vector.modify (\mbuf -> MVector.write mbuf offset byte) buf
+setPixelAt bitmap@(Bitmap dim buf) c@(x, _) set
+  | isNull bitmap = error "Cannot write to null bitmap"
+  | otherwise =
+      Bitmap dim $ Vector.modify (\mbuf -> MVector.write mbuf offset byte) buf
   where byte = (if set then setBit else clearBit) (buf ! offset) (7 - (x `rem` 8))
-        offset = byteOffset disp c
+        offset = byteOffset bitmap c
 
 -- |Returns the byte offset for the given coordinates into the given bitmap.
 byteOffset :: Bitmap -> (Int, Int) -> Int
@@ -129,3 +135,7 @@ blit dest@(Bitmap (dw, dh) dbuf) (Bitmap (sw, sh) sbuf) (ox, oy)
 -- |Returns the number of white pixels in the given 'Bitmap'.
 numWhitePixels :: Bitmap -> Int
 numWhitePixels (Bitmap _ buf) = Vector.sum $ Vector.map popCount buf
+
+-- |Returns 'True' if the given bitmap has non-zero width and height,
+isNull :: Bitmap -> Bool
+isNull (Bitmap (w, h) _) = (w == 0) || (h == 0)
