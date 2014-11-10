@@ -229,9 +229,9 @@ setMem addr value = do
 
   modifySystemState $ \st ->
     st { _mainMemory = let index = fromIntegral addr
-                      in Vector.modify
-                           (\v -> MVector.write v index value)
-                           (_mainMemory st)}
+                       in Vector.modify
+                          (\v -> MVector.write v index value)
+                          (_mainMemory st)}
 
 -- |Returns the value at the given memory address.
 getMem :: Word16 -> System Word8
@@ -325,11 +325,11 @@ push value = modifySystemState $ \st -> st { _stack = value : _stack st }
 pop :: System Word16
 pop = do
   st <- getSystemState
-  let stk = _stack st
-  when (null stk) $ systemException "Cannot pop empty stack"
-  let (ret:newStack) = stk
-  putSystemState $ st { _stack = newStack }
-  return ret
+  case _stack st of
+   [] -> systemException "Cannot pop empty stack"
+   (top:rest) -> do
+     putSystemState $ st { _stack = rest }
+     return top
 
 -- |Blits the given 'Bitmap' to the display at the given coordinates.
 blit :: Bitmap -> (Int, Int) -> System ()
@@ -350,10 +350,11 @@ nextRandom :: System Word8
 nextRandom = do
   st <- getSystemState
   let (Infinite randoms) = _randoms st
-  when (null randoms) $ systemException "Out of randoms"
-  let (next:remaining) = randoms
-  putSystemState $ st { _randoms = Infinite remaining }
-  return next
+  case randoms of
+   [] -> systemException "Out of randoms"
+   (next:rest) -> do
+     putSystemState $ st { _randoms = Infinite rest }
+     return next
 
 -- |Returns the currently pressed key, if any.
 getKey :: System (Maybe Word8)

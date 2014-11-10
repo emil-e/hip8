@@ -128,7 +128,7 @@ blit dest@(Bitmap (dw, dh) dbuf) (Bitmap (sw, sh) sbuf) (ox, oy)
                             leftIndex = byteOffset dest (x, y)
                             rightIndex = byteOffset dest (x + 8, y)
                             leftPart = shiftR byte bitOffset
-                            rightPart = shiftL byte (8 - bitOffset) 
+                            rightPart = shiftL byte (8 - bitOffset)
                         in (leftIndex, leftPart) :
                            (rightIndex, rightPart) :
                            blitAssocs  (Vector.tail vec)
