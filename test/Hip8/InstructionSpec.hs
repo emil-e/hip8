@@ -430,3 +430,28 @@ spec = do
           setRegI addr
           execInstruction $ drw regx regy (fromIntegral n)
 
+  describe "skp" $ do
+    prop "steps PC by two if key is equal to value in register" $
+      \time key (Reg reg) -> stepsPCBy 2
+                               (setReg reg key >> execInstruction (skp reg))
+                               (Environment time (Just key))
+
+    prop "steps PC by one if key is not equal to value in register" $
+      \time key (Reg reg) ->
+      forAll (arbitrary `suchThat` (/= key)) $ \value ->
+        stepsPCBy 1
+          (setReg reg value >> execInstruction (skp reg))
+          (Environment time (Just key))
+
+  describe "sknp" $ do
+    prop "steps PC by one if key is equal to value in register" $
+      \time key (Reg reg) -> stepsPCBy 1
+                               (setReg reg key >> execInstruction (sknp reg))
+                               (Environment time (Just key))
+
+    prop "steps PC by two if key is not equal to value in register" $
+      \time key (Reg reg) ->
+      forAll (arbitrary `suchThat` (/= key)) $ \value ->
+        stepsPCBy 2
+          (setReg reg value >> execInstruction (sknp reg))
+          (Environment time (Just key))
