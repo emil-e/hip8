@@ -40,12 +40,12 @@ import qualified Data.Vector.Generic as Vector
 import Control.Applicative
 import Control.Monad
 import Data.Word
+import Data.Maybe
 import System.Random
+import Debug.Trace
 
 instance Arbitrary Environment where
-  arbitrary = Environment
-              <$> (arbitrary `suchThat` (>0.0))
-              <*> oneof [pure Nothing, Just <$> anyKey]
+  arbitrary = Environment <$> oneof [pure Nothing, Just <$> anyKey]
 
 -- |Generates a valid key press
 anyKey :: Gen Word8
@@ -64,7 +64,10 @@ instance Arbitrary SystemState where
     pc <- pcWithStepMargin 1
     env <- arbitrary
     disp <- bitmapWithSize displaySize
+    t <- getNonNegative <$> arbitrary
     rnds <- randoms <$> mkStdGen <$> arbitrary
+    sndValue <- arbitrary
+    dlyValue <- arbitrary
 
     let (Right state) = execSystem env initialSystemState $ do
           writeMem userMemoryStart mem
@@ -73,7 +76,10 @@ instance Arbitrary SystemState where
           forM_ stk push
           setPC pc
           setRandoms rnds
+          sleep t
           blit disp (0, 0)
+          when (isJust sndValue) (setSoundTimer $ fromJust sndValue)
+          when (isJust dlyValue) (setDelayTimer $ fromJust dlyValue)
     return state
 
 -- Make 'Either' testable
@@ -110,30 +116,32 @@ writableAddress = choose (userMemoryStart, memorySize - 1)
 readOnlyAddress :: Gen Word16
 readOnlyAddress = choose (0, userMemoryStart - 1)
 
--- |Generates a tuple containing an address and length denoting a readable (but not necessarily writable)
--- memory area.
+-- |Generates a tuple containing an address and length denoting a readable
+-- (but not necessarily writable) memory area.
 readableArea :: Gen (Word16, Word16)
 readableArea = do
   start <- readableAddress
   end <- choose (start, memorySize)
   return (start, end - start)
 
--- |Generates a tuple containing an address and length denoting a readable/writable memory area.
+-- |Generates a tuple containing an address and length denoting a
+-- readable/writable memory area.
 writableArea :: Gen (Word16, Word16)
 writableArea = do
   start <- writableAddress
   end <- choose (start, memorySize)
   return (start, end - start)
 
--- |Generates a tuple containing an address and length denoting a memory area overlapping a read only
--- region.
+-- |Generates a tuple containing an address and length denoting a memory area
+-- overlapping a read only region.
 readOnlyArea :: Gen (Word16, Word16)
 readOnlyArea = do
   start <- readOnlyAddress
   end <- choose (start, memorySize)
   return (start, end - start)
 
--- |Generates a tuple containing an address and length denoting an invalid memory area.
+-- |Generates a tuple containing an address and length denoting an invalid
+-- memory area.
 invalidArea :: Gen (Word16, Word16)
 invalidArea = oneof [invalidStart, invalidEnd]
   where invalidStart = do
@@ -354,14 +362,14 @@ spec = do
 
   describe "blit" $
     prop "blits the given bitmap to the display" $
-      forAll sprite $ \bitmap (Positive x, Positive y) ->
-       do st <- getSystemState
-          blit bitmap (x, y)
-          st' <- getSystemState
-          return $
-            display st'
-            ==
-            Bitmap.blit (display st) bitmap (x, y)
+      forAll sprite $ \bitmap (Positive x, Positive y) -> do
+        st <- getSystemState
+        blit bitmap (x, y)
+        st' <- getSystemState
+        return $
+          display st'
+          ==
+          Bitmap.blit (display st) bitmap (x, y)
 
   describe "clearDisplay" $
     prop "makes the screen black" $
@@ -374,3 +382,50 @@ spec = do
       \rnds -> do setRandoms rnds
                   result <- replicateM (length rnds) nextRandom
                   return $ result == rnds
+
+  describe "sleep" $ do
+    prop "increases the time by the specified amount" $
+      \t ->  do t0 <- getTime
+                sleep t
+                t1 <- getTime
+                return $ t1 == (t0 + t)
+
+  describe "setSoundTimer" $
+    prop "sets the sound timer" $
+      \value -> do setSoundTimer value
+                   x <- getSoundTimer
+                   return $ x == value
+
+  describe "setDelayTimer" $
+    prop "sets the delay timer" $
+      \value -> do setDelayTimer value
+                   x <- getDelayTimer
+                   return $ x == value
+
+  describe "getSoundTimer" $ do
+    prop "decreases with 1 every 1/60 seconds" $
+      forAll (choose (1, 255)) $ \x0 -> do
+        setSoundTimer x0
+        sleep $ 1.1 / 60
+        x1 <- getSoundTimer
+        return $ x0 == (x1 + 1)
+
+    prop "eventually decreases to zero" $
+      \x0 -> do setSoundTimer x0
+                sleep 10
+                x1 <- getSoundTimer
+                return $ x1 == 0
+
+  describe "getDelayTimer" $ do
+    prop "decreases with 1 every 1/60 seconds" $
+      forAll (choose (1, 255)) $ \x0 -> do
+        setDelayTimer x0
+        sleep $ 1.1 / 60
+        x1 <- getDelayTimer
+        return $ x0 == (x1 + 1)
+
+    prop "eventually decreases to zero" $
+      \x0 -> do setDelayTimer x0
+                sleep 10
+                x1 <- getDelayTimer
+                return $ x1 == 0

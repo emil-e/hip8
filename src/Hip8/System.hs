@@ -12,7 +12,10 @@ module Hip8.System (
   register,
   stack,
   programCounter,
+  time,
   display,
+  delayTimer,
+  soundTimer,
   memorySize,
   numRegisters,
   userMemoryStart,
@@ -44,7 +47,13 @@ module Hip8.System (
   blit,
   clearDisplay,
   setRandoms,
-  nextRandom
+  nextRandom,
+  getTime,
+  sleep,
+  setSoundTimer,
+  getSoundTimer,
+  setDelayTimer,
+  getDelayTimer
   ) where
 
 import Hip8.Bitmap (Bitmap)
@@ -60,11 +69,11 @@ import Text.Printf
 
 -- |Describes the input to the emulated system consisting of the current time
 -- and the currently pressed key.
-data Environment = Environment Float (Maybe Word8)
+data Environment = Environment (Maybe Word8)
                  deriving (Eq, Show)
 
 -- |Describes a value set at a particular time for the sound timer or delay timer.
-data TimerSetting = NotSet | Set Float Word8
+data TimerSetting = NotSet | Set Double Word8
                   deriving (Eq, Show)
 
 -- |Newtype around list to ensure not displaying all elements.
@@ -87,6 +96,8 @@ data SystemState = SystemState {
   _stack :: [Word16],
   -- |The program counter
   _programCounter :: Word16,
+  -- |The current system time in seconds.
+  _time :: Double,
   -- |The delay timer setting
   _delayTimerSetting :: TimerSetting,
   -- |The sound timer setting
@@ -121,9 +132,27 @@ stack = _stack
 programCounter :: SystemState -> Word16
 programCounter = _programCounter
 
+-- | Returns the time of the given 'SystemState'.
+time :: SystemState -> Double
+time = _time
+
 -- |Returns the display buffer of the given 'SystemState'.
 display :: SystemState -> Bitmap
 display = _display
+
+timerValue :: TimerSetting -> Double -> Word8
+timerValue NotSet _ = 0
+timerValue (Set t0 value) t = fromIntegral $ max 0 $ fromIntegral value - n
+  where n :: Int
+        n = truncate $ (t - t0) * 60
+
+-- |Returns the current delay timer value.
+delayTimer :: SystemState -> Word8
+delayTimer st = timerValue (_delayTimerSetting st) (time st)
+
+-- |Returns the current sound timer value.
+soundTimer :: SystemState -> Word8
+soundTimer st = timerValue (_soundTimerSetting st) (time st)
 
 -- |The memory size of the Chip-8 system
 memorySize :: Word16
@@ -145,6 +174,7 @@ initialSystemState = SystemState {
   _registerI = 0,
   _stack = [],
   _programCounter = userMemoryStart,
+  _time = 0,
   _delayTimerSetting = NotSet,
   _soundTimerSetting = NotSet,
   _display = initialDisplay,
@@ -210,9 +240,8 @@ putSystemState s = do
 
 -- |Applies the given function to the current state.
 modifySystemState :: (SystemState -> SystemState) -> System ()
-modifySystemState f = do
-  st <- getSystemState
-  putSystemState $ f st
+modifySystemState f = do st <- getSystemState
+                         putSystemState $ f st
 
 -- |Throws a 'SystemException'.
 systemException :: String -> System a
@@ -301,7 +330,8 @@ getRegI = _registerI <$> getSystemState
 setPC :: Word16 -> System ()
 setPC value = do
   unless (even value) $
-    systemException (printf "Address 0x%X is not even and thus not a valid PC" value)
+    systemException (printf
+                     "Address 0x%X is not even and thus not a valid PC" value)
   unless (value < memorySize) $
     systemException (printf "Invalid address 0x%X" value)
   modifySystemState $ \st -> st { _programCounter = value }
@@ -354,3 +384,29 @@ nextRandom = do
    (next:rest) -> do
      putSystemState $ st { _randoms = Infinite rest }
      return next
+
+-- |Returns the current time.
+getTime :: System Double
+getTime = time <$> getSystemState
+
+-- |Increases the system time by the given amount of seconds.
+sleep :: Double -> System ()
+sleep t = modifySystemState $ \st -> st { _time = _time st + t }
+
+-- |Sets the sound timer.
+setSoundTimer :: Word8 -> System ()
+setSoundTimer value = modifySystemState $ \st ->
+  st { _soundTimerSetting = Set (time st) value }
+
+-- |Returns the current value of the sound timer.
+getSoundTimer :: System Word8
+getSoundTimer = soundTimer <$> getSystemState
+
+-- |Sets the delay timer.
+setDelayTimer :: Word8 -> System ()
+setDelayTimer value = modifySystemState $ \st ->
+  st { _delayTimerSetting = Set (time st) value }
+
+-- |Returns the current value of the delay timer.
+getDelayTimer :: System Word8
+getDelayTimer = delayTimer <$> getSystemState

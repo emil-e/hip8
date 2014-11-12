@@ -12,7 +12,6 @@ import Hip8.System
 import Hip8.Instruction
 import qualified Hip8.Bitmap as Bitmap
 import Hip8.SystemSpec
-import Hip8.BitmapSpec
 import Data.Maybe
 import Control.Monad
 import Control.Applicative
@@ -432,26 +431,25 @@ spec = do
 
   describe "skp" $ do
     prop "steps PC by two if key is equal to value in register" $
-      \time key (Reg reg) -> stepsPCBy 2
-                               (setReg reg key >> execInstruction (skp reg))
-                               (Environment time (Just key))
+      \key (Reg reg) -> stepsPCBy 2
+                          (setReg reg key >> execInstruction (skp reg))
+                          (Environment $ Just key)
 
     prop "steps PC by one if key is not equal to value in register" $
-      \time key (Reg reg) ->
-      forAll (arbitrary `suchThat` (/= key)) $ \value ->
+      \key (Reg reg) -> forAll (arbitrary `suchThat` (/= key)) $ \value ->
         stepsPCBy 1
           (setReg reg value >> execInstruction (skp reg))
-          (Environment time (Just key))
+          (Environment $ Just key)
 
   describe "sknp" $ do
     prop "steps PC by one if key is equal to value in register" $
-      \time key (Reg reg) -> stepsPCBy 1
-                               (setReg reg key >> execInstruction (sknp reg))
-                               (Environment time (Just key))
+      \key (Reg reg) -> stepsPCBy 1
+                          (setReg reg key >> execInstruction (sknp reg))
+                          (Environment $ Just key)
 
     prop "steps PC by two if key is not equal to value in register" $
-      \time key (Reg reg) ->
+      \key (Reg reg) ->
       forAll (arbitrary `suchThat` (/= key)) $ \value ->
         stepsPCBy 2
           (setReg reg value >> execInstruction (sknp reg))
-          (Environment time (Just key))
+          (Environment $ Just key)
