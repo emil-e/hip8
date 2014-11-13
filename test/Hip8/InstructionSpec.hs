@@ -453,3 +453,13 @@ spec = do
         stepsPCBy 2
           (setReg reg value >> execInstruction (sknp reg))
           (Environment $ Just key)
+
+  describe "ldRegDT" $ do
+    prop "load the value of the delay timer into the given register" $
+      \(Reg reg) -> do dt <- getDelayTimer
+                       execInstruction $ ldRegDT reg
+                       regDt <- getReg reg
+                       return $ dt == regDt
+
+    prop "steps PC by one" $
+      \(Reg reg) -> do stepsPCBy 1 $ execInstruction $ ldRegDT reg

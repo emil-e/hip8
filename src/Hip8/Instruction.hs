@@ -297,7 +297,7 @@ sknp reg = Instruction (InstructionInfo "SKNP" [Reg reg]) exec
 
 ldRegDT :: Word8 -> Instruction
 ldRegDT reg = Instruction (InstructionInfo "LD" [Reg reg, DelayTimer]) exec
-  where exec = undefined
+  where exec = getDelayTimer >>= setReg reg >> stepPC
 
 ldRegKey :: Word8 -> Instruction
 ldRegKey reg = Instruction (InstructionInfo "LD" [Reg reg, Key]) exec
