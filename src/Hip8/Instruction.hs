@@ -301,7 +301,10 @@ ldRegDT reg = Instruction (InstructionInfo "LD" [Reg reg, DelayTimer]) exec
 
 ldRegKey :: Word8 -> Instruction
 ldRegKey reg = Instruction (InstructionInfo "LD" [Reg reg, Key]) exec
-  where exec = undefined
+  where exec = do Environment mkey <- getEnvironment
+                  case mkey of
+                   Nothing -> return ()
+                   Just key -> setReg reg key >> stepPC
 
 ldDTReg :: Word8 -> Instruction
 ldDTReg reg = Instruction (InstructionInfo "LD" [DelayTimer, Reg reg]) exec

@@ -463,3 +463,20 @@ spec = do
 
     prop "steps PC by one" $
       \(Reg reg) -> do stepsPCBy 1 $ execInstruction $ ldRegDT reg
+
+  describe "ldRegKey" $ do
+    prop "loads the key into the given register" $
+      \(Reg reg) key state -> evalSystem (Environment $ Just key) state $ do
+        execInstruction $ ldRegKey reg
+        regKey <- getReg reg
+        return $ regKey == key
+
+    prop "does not step PC if there is no key" $ do
+      \(Reg reg) -> stepsPCBy 0
+                      (execInstruction $ ldRegKey reg)
+                      (Environment Nothing)
+
+    prop "step PC by one if there is a key" $ do
+      \(Reg reg) key -> stepsPCBy 1
+                          (execInstruction $ ldRegKey reg)
+                          (Environment (Just key))
