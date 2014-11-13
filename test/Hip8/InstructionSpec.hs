@@ -480,3 +480,14 @@ spec = do
       \(Reg reg) key -> stepsPCBy 1
                           (execInstruction $ ldRegKey reg)
                           (Environment (Just key))
+
+  describe "ldDTReg" $ do
+    prop "loads value of the given register into DT" $
+      \(Reg reg) -> do x <- getReg reg
+                       execInstruction $ ldDTReg reg
+                       dtx <- getDelayTimer
+                       return $ x == dtx
+
+    prop "steps PC by one" $ do
+      \(Reg reg) -> stepsPCBy 1 $ execInstruction $ ldDTReg reg
+
