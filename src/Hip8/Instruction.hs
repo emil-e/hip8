@@ -312,7 +312,7 @@ ldDTReg reg = Instruction (InstructionInfo "LD" [DelayTimer, Reg reg]) exec
 
 ldSTReg :: Word8 -> Instruction
 ldSTReg reg = Instruction (InstructionInfo "LD" [SoundTimer, Reg reg]) exec
-  where exec = undefined
+  where exec = getReg reg >>= setSoundTimer >> stepPC
 
 addIReg :: Word8 -> Instruction
 addIReg reg = Instruction (InstructionInfo "ADD" [RegI, Reg reg]) exec

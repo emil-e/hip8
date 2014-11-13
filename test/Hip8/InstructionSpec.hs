@@ -491,3 +491,13 @@ spec = do
     prop "steps PC by one" $ do
       \(Reg reg) -> stepsPCBy 1 $ execInstruction $ ldDTReg reg
 
+  describe "ldSTReg" $ do
+    prop "loads value of the given register into ST" $
+      \(Reg reg) -> do x <- getReg reg
+                       execInstruction $ ldSTReg reg
+                       dtx <- getSoundTimer
+                       return $ x == dtx
+
+    prop "steps PC by one" $ do
+      \(Reg reg) -> stepsPCBy 1 $ execInstruction $ ldSTReg reg
+
