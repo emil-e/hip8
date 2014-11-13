@@ -501,3 +501,13 @@ spec = do
     prop "steps PC by one" $ do
       \(Reg reg) -> stepsPCBy 1 $ execInstruction $ ldSTReg reg
 
+  describe "addIReg" $ do
+    prop "adds I and the given register to together and stores in I" $
+      \(Reg reg) -> do i <- getRegI
+                       x <- getReg reg
+                       execInstruction $ addIReg reg
+                       i' <- getRegI
+                       return $ i' == (fromIntegral x + i)
+
+    prop "steps PC by one" $
+      \(Reg reg) -> stepsPCBy 1 $ execInstruction $ addIReg reg

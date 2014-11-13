@@ -316,7 +316,10 @@ ldSTReg reg = Instruction (InstructionInfo "LD" [SoundTimer, Reg reg]) exec
 
 addIReg :: Word8 -> Instruction
 addIReg reg = Instruction (InstructionInfo "ADD" [RegI, Reg reg]) exec
-  where exec = undefined
+  where exec = do i <- getRegI
+                  x <- getReg reg
+                  setRegI $ fromIntegral x + i
+                  stepPC
 
 ldFReg :: Word8 -> Instruction
 ldFReg reg = Instruction (InstructionInfo "LD" [SpriteLoc, Reg reg]) exec
