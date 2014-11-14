@@ -343,8 +343,13 @@ ldBReg reg = Instruction (InstructionInfo "LD" [BCD, Reg reg]) exec
                   stepPC
 
 ldMemRegs :: Word8 -> Instruction
-ldMemRegs x = Instruction (InstructionInfo "LD" [AddrI, Reg x]) exec
-  where exec = undefined
+ldMemRegs n = Instruction (InstructionInfo "LD" [AddrI, Reg n]) exec
+  where exec = do regs <- Vector.generateM
+                            (fromIntegral n + 1)
+                            (getReg . fromIntegral)
+                  addr <- getRegI
+                  writeMem addr regs
+                  stepPC
 
 ldRegsMem :: Word8 -> Instruction
 ldRegsMem x = Instruction (InstructionInfo "LD" [Reg x, AddrI]) exec

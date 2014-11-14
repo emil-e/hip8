@@ -560,3 +560,21 @@ spec = do
       forAll (choose (userMemoryStart, memorySize - 3)) $ \addr (Reg reg) ->
         stepsPCBy 1 $ do setRegI addr
                          execInstruction $ ldBReg reg
+
+  describe "ldMemRegs" $ do
+    prop "stores registers into memory address I" $
+      forAll (choose (userMemoryStart, memorySize - 16)) $
+      \addr (Reg lastReg) -> do regs <- Vector.generateM
+                                        (fromIntegral lastReg + 1)
+                                        (getReg . fromIntegral)
+                                setRegI addr
+                                execInstruction $ ldMemRegs lastReg
+                                mem <- readMem addr (fromIntegral lastReg + 1)
+                                return $ mem == regs
+
+    prop "steps PC by one" $
+      forAll (choose (userMemoryStart, memorySize - 16)) $
+      \addr (Reg lastReg) -> stepsPCBy 1 $ do
+        setRegI addr
+        execInstruction $ ldMemRegs lastReg
+
