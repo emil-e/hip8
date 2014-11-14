@@ -34,7 +34,7 @@ module Hip8.System (
   charSprites,
   charSpritesBase,
   charSpriteSize,
-  
+
   setMem,
   getMem,
   writeMem,
