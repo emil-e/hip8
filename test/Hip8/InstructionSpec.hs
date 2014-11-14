@@ -578,3 +578,19 @@ spec = do
         setRegI addr
         execInstruction $ ldMemRegs lastReg
 
+  describe "ldRegsMem" $ do
+    prop "loads registers from memory address I" $
+      forAll (choose (userMemoryStart, memorySize - 16)) $
+      \addr (Reg lastReg) -> do mem <- readMem addr (fromIntegral lastReg + 1)
+                                setRegI addr
+                                execInstruction $ ldRegsMem lastReg
+                                regs <- Vector.generateM
+                                          (fromIntegral lastReg + 1)
+                                          (getReg . fromIntegral)
+                                return $ mem == regs
+
+    prop "steps PC by one" $
+      forAll (choose (userMemoryStart, memorySize - 16)) $
+      \addr (Reg lastReg) -> stepsPCBy 1 $ do
+        setRegI addr
+        execInstruction $ ldRegsMem lastReg

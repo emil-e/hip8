@@ -352,5 +352,9 @@ ldMemRegs n = Instruction (InstructionInfo "LD" [AddrI, Reg n]) exec
                   stepPC
 
 ldRegsMem :: Word8 -> Instruction
-ldRegsMem x = Instruction (InstructionInfo "LD" [Reg x, AddrI]) exec
-  where exec = undefined
+ldRegsMem n = Instruction (InstructionInfo "LD" [Reg n, AddrI]) exec
+  where exec = do addr <- getRegI
+                  mem <- readMem addr (fromIntegral n + 1)
+                  Vector.forM_ (Vector.indexed mem) $ \(i, x) ->
+                    setReg (fromIntegral i) x
+                  stepPC
