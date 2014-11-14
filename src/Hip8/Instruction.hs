@@ -54,6 +54,7 @@ import Control.Applicative
 import Data.Word
 import Control.Monad
 import Data.Bits
+import Text.Printf
 
 -- |A pseudo-argument to an instruction.
 data PseudoArg = Addr Word16
@@ -323,7 +324,11 @@ addIReg reg = Instruction (InstructionInfo "ADD" [RegI, Reg reg]) exec
 
 ldFReg :: Word8 -> Instruction
 ldFReg reg = Instruction (InstructionInfo "LD" [SpriteLoc, Reg reg]) exec
-  where exec = undefined
+  where exec = do n <- getReg reg
+                  when (n > 0xF) $
+                    systemException $ printf "%d is not a valid digit" n
+                  setRegI $ charSpritesBase + (charSpriteSize * fromIntegral n)
+                  stepPC
 
 ldBReg :: Word8 -> Instruction
 ldBReg reg = Instruction (InstructionInfo "LD" [BCD, Reg reg]) exec

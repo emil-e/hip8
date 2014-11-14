@@ -31,6 +31,10 @@ module Hip8.System (
   getSystemState,
   systemException,
 
+  charSprites,
+  charSpritesBase,
+  charSpriteSize,
+  
   setMem,
   getMem,
   writeMem,
@@ -114,9 +118,38 @@ instance Eq SystemState where
              (_registerI s1 == _registerI s2) &&
              (_stack s1 == _stack s2) &&
              (_programCounter s1 == _programCounter s2) &&
+             (_time s1 == _time s2) &&
              (_delayTimerSetting s1 == _delayTimerSetting s2) &&
              (_soundTimerSetting s1 == _soundTimerSetting s2) &&
              (_display s1 == _display s2)
+
+charSprites :: Vector Word8
+charSprites = Vector.fromList $ [
+  0xF0, 0x90, 0x90, 0x90, 0xF0, -- 0
+  0x20, 0x60, 0x20, 0x20, 0x70, -- 1
+  0xF0, 0x10, 0xF0, 0x80, 0xF0, -- 2
+  0xF0, 0x10, 0xF0, 0x10, 0xF0, -- 3
+  0x90, 0x90, 0xF0, 0x10, 0x10, -- 4
+  0xF0, 0x80, 0xF0, 0x10, 0xF0, -- 5
+  0xF0, 0x80, 0xF0, 0x90, 0xF0, -- 6
+  0xF0, 0x10, 0x20, 0x40, 0x40, -- 7
+  0xF0, 0x90, 0xF0, 0x90, 0xF0, -- 8
+  0xF0, 0x90, 0xF0, 0x10, 0xF0, -- 9
+  0xF0, 0x90, 0xF0, 0x90, 0x90, -- A
+  0xE0, 0x90, 0xE0, 0x90, 0xE0, -- B
+  0xF0, 0x80, 0x80, 0x80, 0xF0, -- C
+  0xE0, 0x90, 0x90, 0x90, 0xE0, -- D
+  0xF0, 0x80, 0xF0, 0x80, 0xF0, -- E
+  0xF0, 0x80, 0xF0, 0x80, 0x80  -- F
+  ]
+
+-- |The base address of the built in character sprites.
+charSpritesBase :: Word16
+charSpritesBase = 0
+
+-- |The size of a character sprite in bytes.
+charSpriteSize :: Word16
+charSpriteSize = 5
 
 -- |Returns the value of the register with the given index for the given 'SystemState'.
 register :: SystemState -> Word8 -> Word8
@@ -169,7 +202,12 @@ userMemoryStart = 0x200
 -- |The initial system state with no program loaded
 initialSystemState :: SystemState
 initialSystemState = SystemState {
-  _mainMemory = Vector.replicate (fromIntegral memorySize) 0,
+  _mainMemory =
+     let memSize = fromIntegral memorySize
+         spritesSize = Vector.length charSprites
+     in (Vector.++)
+          charSprites $
+          Vector.replicate (memSize - spritesSize) 0,
   _registers = Vector.replicate (fromIntegral numRegisters) 0,
   _registerI = 0,
   _stack = [],
@@ -283,7 +321,9 @@ writeMem addr bytes = do
 
   modifySystemState $ \st ->
     st { _mainMemory = Vector.modify
-                        (\v -> Vector.copy (MVector.slice index len v) bytes)
+                        (\v -> Vector.unsafeCopy
+                                 (MVector.slice index len v)
+                                 bytes)
                         (_mainMemory st) }
 
 -- |Reads the given number of bytes starting at the given address.

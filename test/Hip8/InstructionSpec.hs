@@ -17,6 +17,7 @@ import Control.Monad
 import Control.Applicative
 import Data.Word
 import Data.Bits
+import qualified Data.Vector.Unboxed as Vector
 
 -- |Checks if the given action steps the PC by the given number of steps (i.e. increases the PC
 -- by N * 2) when run with the given 'Environment' and 'SystemState'.
@@ -511,3 +512,32 @@ spec = do
 
     prop "steps PC by one" $
       \(Reg reg) -> stepsPCBy 1 $ execInstruction $ addIReg reg
+
+  describe "ldFReg" $ do
+    prop "loads the address to the sprite for Vx into I" $
+      forAll (choose (0, 0xF)) $ \n (Reg reg) ->
+        do setReg reg n
+           execInstruction $ ldFReg reg
+           addr <- getRegI
+           mem <- readMem addr 5
+           let offset = fromIntegral n * fromIntegral charSpriteSize
+               len = fromIntegral charSpriteSize
+               spr = Vector.slice offset len charSprites
+           return $ mem == spr
+
+    prop "returned address is in read only area" $
+      forAll (choose (0, 0xF)) $ \value (Reg reg) ->
+        do setReg reg value
+           execInstruction $ ldFReg reg
+           addr <- getRegI
+           return $ (addr + fromIntegral charSpriteSize) < userMemoryStart
+
+    prop "fails if register contains value > 0xF" $
+      forAll (arbitrary `suchThat` (>0xF)) $ \value (Reg reg) ->
+        isError $ do setReg reg value
+                     execInstruction $ ldFReg reg
+
+    prop "steps PC by one" $
+      forAll (choose (0, 0xF)) $ \value (Reg reg) ->
+        stepsPCBy 1 $ do setReg reg value
+                         execInstruction $ ldFReg reg
