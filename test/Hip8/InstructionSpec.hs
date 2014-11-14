@@ -18,6 +18,7 @@ import Control.Applicative
 import Data.Word
 import Data.Bits
 import qualified Data.Vector.Unboxed as Vector
+import Text.Printf
 
 -- |Checks if the given action steps the PC by the given number of steps (i.e. increases the PC
 -- by N * 2) when run with the given 'Environment' and 'SystemState'.
@@ -541,3 +542,21 @@ spec = do
       forAll (choose (0, 0xF)) $ \value (Reg reg) ->
         stepsPCBy 1 $ do setReg reg value
                          execInstruction $ ldFReg reg
+
+  describe "ldBReg" $ do
+    prop "stores the value of the given register as a BCD on address I" $
+      forAll (choose (userMemoryStart, memorySize - 3)) $
+      \addr (Reg reg) value -> do
+        setReg reg value
+        setRegI addr
+        execInstruction $ ldBReg reg
+        mem <- readMem addr 3
+        return $
+          (Vector.foldl' (\a b -> a ++ show b) [] mem)
+          ==
+          (printf "%03d" value)
+
+    prop "steps PC by one" $
+      forAll (choose (userMemoryStart, memorySize - 3)) $ \addr (Reg reg) ->
+        stepsPCBy 1 $ do setRegI addr
+                         execInstruction $ ldBReg reg

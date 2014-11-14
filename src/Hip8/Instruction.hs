@@ -55,6 +55,7 @@ import Data.Word
 import Control.Monad
 import Data.Bits
 import Text.Printf
+import qualified Data.Vector.Unboxed as Vector
 
 -- |A pseudo-argument to an instruction.
 data PseudoArg = Addr Word16
@@ -332,7 +333,14 @@ ldFReg reg = Instruction (InstructionInfo "LD" [SpriteLoc, Reg reg]) exec
 
 ldBReg :: Word8 -> Instruction
 ldBReg reg = Instruction (InstructionInfo "LD" [BCD, Reg reg]) exec
-  where exec = undefined
+  where exec = do x <- getReg reg
+                  addr <- getRegI
+                  let d = Vector.fromList
+                          [ x `quot` 100,
+                            (x `rem` 100) `quot` 10,
+                            x `rem` 10 ]
+                  writeMem addr d
+                  stepPC
 
 ldMemRegs :: Word8 -> Instruction
 ldMemRegs x = Instruction (InstructionInfo "LD" [AddrI, Reg x]) exec
