@@ -52,9 +52,9 @@ import Hip8.System
 import qualified Hip8.Bitmap as Bitmap
 import Control.Applicative
 import Data.Word
-import Control.Monad
 import Data.Bits
 import Data.List
+import Control.Monad
 import Text.Printf
 import qualified Data.Vector.Unboxed as Vector
 
@@ -303,16 +303,16 @@ drw xreg yreg n  = Instruction (InstructionInfo "DRW" [Reg xreg, Reg yreg, Nibbl
 
 skp :: Word8 -> Instruction
 skp reg = Instruction (InstructionInfo "SKP" [Reg reg]) exec
-  where exec = do Environment key <- getEnvironment
-                  x <- getReg reg
-                  when (key == Just x) stepPC
+  where exec = do x <- getReg reg
+                  pressed <- getKeyState x
+                  when pressed stepPC
                   stepPC
 
 sknp :: Word8 -> Instruction
 sknp reg = Instruction (InstructionInfo "SKNP" [Reg reg]) exec
-  where exec = do Environment key <- getEnvironment
-                  x <- getReg reg
-                  when (key /= Just x) stepPC
+  where exec = do x <- getReg reg
+                  pressed <- getKeyState x
+                  when (not pressed) stepPC
                   stepPC
 
 ldRegDT :: Word8 -> Instruction
@@ -321,10 +321,11 @@ ldRegDT reg = Instruction (InstructionInfo "LD" [Reg reg, DelayTimer]) exec
 
 ldRegKey :: Word8 -> Instruction
 ldRegKey reg = Instruction (InstructionInfo "LD" [Reg reg, Key]) exec
-  where exec = do Environment mkey <- getEnvironment
-                  case mkey of
+  where exec = do states <- forM [0..0xF] $ \key -> do
+                    (,) <$> pure key <*> getKeyState key
+                  case find snd states of
                    Nothing -> return ()
-                   Just key -> setReg reg key >> stepPC
+                   Just (key, _) -> setReg reg key >> stepPC
 
 ldDTReg :: Word8 -> Instruction
 ldDTReg reg = Instruction (InstructionInfo "LD" [DelayTimer, Reg reg]) exec

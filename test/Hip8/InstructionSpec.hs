@@ -22,10 +22,10 @@ import Text.Printf
 
 -- |Checks if the given action steps the PC by the given number of steps (i.e. increases the PC
 -- by N * 2) when run with the given 'Environment' and 'SystemState'.
-stepsPCBy :: Word16 -> System a -> Environment -> SystemState -> Property
-stepsPCBy n action env state =
+stepsPCBy :: Word16 -> System a -> SystemState -> Property
+stepsPCBy n action state =
   forAll (pcWithStepMargin n) $ \pc ->
-    evalSystem env state $ do
+    evalSystem state $ do
       setPC pc
       action
       pc' <- getPC
@@ -130,9 +130,9 @@ spec = do
 
   describe "cls" $
     prop "clears the screen" $
-      \env state -> (display <$> execSystem env state (execInstruction cls))
-                     ==
-                    Right initialDisplay
+      \state -> (display <$> execSystem state (execInstruction cls))
+                ==
+                Right initialDisplay
 
   describe "ret" $ do
     prop "sets the PC to the top of the stack plus one step" $
@@ -142,11 +142,13 @@ spec = do
                       return $ x == (top + 2)
 
     prop "pops the stack" $
-      forAll (arbitrary `suchThat` (not . null . stack)) $ \state env ->
-        (stack <$> execSystem env state (execInstruction ret)) == Right (tail $ stack state)
+      forAll (arbitrary `suchThat` (not . null . stack)) $ \state ->
+        (stack <$> execSystem state (execInstruction ret))
+        ==
+        Right (tail $ stack state)
 
     prop "fails on empty stack" $
-      \env -> isError (execInstruction ret) env initialSystemState
+      isError (execInstruction ret) initialSystemState
 
     prop "fails if return address is at end of memory" $
       isError $ push (memorySize - 2) >> execInstruction ret
@@ -171,9 +173,9 @@ spec = do
 
   describe "seRegByte" $ do
     prop "steps PC by one if register not equal to immediate" $
-      \env state (Reg reg) byte ->
+      \state (Reg reg) byte ->
         byte /= register state reg ==>
-          stepsPCBy 1 (execInstruction $ seRegByte reg byte) env state
+          stepsPCBy 1 (execInstruction $ seRegByte reg byte) state
 
     prop "steps PC by two if register equal to immediate" $
       \(Reg reg) byte ->
@@ -181,9 +183,9 @@ spec = do
 
   describe "sneRegByte" $ do
     prop "steps PC by two if register not equal to immediate" $
-      \env state (Reg reg) byte ->
+      \state (Reg reg) byte ->
         byte /= register state reg ==>
-          stepsPCBy 2 (execInstruction $ sneRegByte reg byte) env state
+          stepsPCBy 2 (execInstruction $ sneRegByte reg byte) state
 
     prop "steps PC by one if register equal to immediate" $
       \(Reg reg) byte ->
@@ -191,9 +193,9 @@ spec = do
 
   describe "seRegReg" $ do
     prop "steps PC by one if register not equal to immediate" $
-      \env state (Reg regx) (Reg regy) ->
+      \state (Reg regx) (Reg regy) ->
         register state regx /= register state regy ==>
-          stepsPCBy 1 (execInstruction $ seRegReg regx regy) env state
+          stepsPCBy 1 (execInstruction $ seRegReg regx regy) state
 
     prop "steps PC by two if register equal to immediate" $
       \(Reg regx) (Reg regy) byte ->
@@ -338,9 +340,9 @@ spec = do
 
   describe "sneRegReg" $ do
     prop "steps PC by two if register not equal to immediate" $
-      \env state (Reg regx) (Reg regy) ->
+      \state (Reg regx) (Reg regy) ->
         register state regx /= register state regy ==>
-          stepsPCBy 2 (execInstruction $ sneRegReg regx regy) env state
+          stepsPCBy 2 (execInstruction $ sneRegReg regx regy) state
 
     prop "steps PC by one if register equal to immediate" $
       \(Reg regx) (Reg regy) byte ->
@@ -432,29 +434,30 @@ spec = do
           execInstruction $ drw regx regy (fromIntegral n)
 
   describe "skp" $ do
-    prop "steps PC by two if key is equal to value in register" $
-      \key (Reg reg) -> stepsPCBy 2
-                          (setReg reg key >> execInstruction (skp reg))
-                          (Environment $ Just key)
+    prop "steps PC by two if the key in the register is pressed" $
+      \(Key key) (Reg reg) -> stepsPCBy 2 $ do
+        setKeyState key True
+        setReg reg key
+        execInstruction $ skp reg
 
-    prop "steps PC by one if key is not equal to value in register" $
-      \key (Reg reg) -> forAll (arbitrary `suchThat` (/= key)) $ \value ->
-        stepsPCBy 1
-          (setReg reg value >> execInstruction (skp reg))
-          (Environment $ Just key)
+    prop "steps PC by one if the key in the register is not pressed" $
+      \(Key key) (Reg reg) -> stepsPCBy 1 $ do
+          setReg reg key
+          setKeyState key False
+          execInstruction $ skp reg
 
   describe "sknp" $ do
-    prop "steps PC by one if key is equal to value in register" $
-      \key (Reg reg) -> stepsPCBy 1
-                          (setReg reg key >> execInstruction (sknp reg))
-                          (Environment $ Just key)
+    prop "steps PC by one if the key in the register is pressed" $
+      \(Key key) (Reg reg) -> stepsPCBy 1 $ do
+        setKeyState key True
+        setReg reg key
+        execInstruction $ sknp reg
 
-    prop "steps PC by two if key is not equal to value in register" $
-      \key (Reg reg) ->
-      forAll (arbitrary `suchThat` (/= key)) $ \value ->
-        stepsPCBy 2
-          (setReg reg value >> execInstruction (sknp reg))
-          (Environment $ Just key)
+    prop "steps PC by two if the key in the register is not pressed" $
+      \(Key key) (Reg reg) -> stepsPCBy 2 $ do
+          setReg reg key
+          setKeyState key False
+          execInstruction $ sknp reg
 
   describe "ldRegDT" $ do
     prop "load the value of the delay timer into the given register" $
@@ -468,20 +471,22 @@ spec = do
 
   describe "ldRegKey" $ do
     prop "loads the key into the given register" $
-      \(Reg reg) key state -> evalSystem (Environment $ Just key) state $ do
+      \(Reg reg) (Key key) -> do
+        forM_ [0..0xF] $ flip setKeyState False
+        setKeyState key True
         execInstruction $ ldRegKey reg
         regKey <- getReg reg
         return $ regKey == key
 
     prop "does not step PC if there is no key" $ do
-      \(Reg reg) -> stepsPCBy 0
-                      (execInstruction $ ldRegKey reg)
-                      (Environment Nothing)
+      \(Reg reg) -> stepsPCBy 0 $ do
+        forM_ [0..0xF] $ flip setKeyState False
+        execInstruction $ ldRegKey reg
 
-    prop "step PC by one if there is a key" $ do
-      \(Reg reg) key -> stepsPCBy 1
-                          (execInstruction $ ldRegKey reg)
-                          (Environment (Just key))
+    prop "steps PC by one if there is a key" $ do
+      \(Reg reg) (Key key) -> stepsPCBy 1 $ do
+        setKeyState key True
+        execInstruction $ ldRegKey reg
 
   describe "ldDTReg" $ do
     prop "loads value of the given register into DT" $

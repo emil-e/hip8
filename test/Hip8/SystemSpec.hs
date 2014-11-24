@@ -1,7 +1,9 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Hip8.SystemSpec (
+  Key(..),
   anyKey,
+
   sprite,
 
   Address(..),
@@ -42,14 +44,17 @@ import Control.Monad
 import Data.Word
 import Data.Maybe
 import System.Random
-import Debug.Trace
-
-instance Arbitrary Environment where
-  arbitrary = Environment <$> oneof [pure Nothing, Just <$> anyKey]
 
 -- |Generates a valid key press
 anyKey :: Gen Word8
 anyKey = choose (0x0, 0xF)
+
+-- |Newtype for generating valid keys.
+newtype Key = Key { getKey :: Word8 }
+            deriving (Show, Eq)
+
+instance Arbitrary Key where
+  arbitrary = Key <$> anyKey
 
 -- |Generates a bitmap which is smaller than the display.
 sprite :: Gen Bitmap
@@ -62,14 +67,14 @@ instance Arbitrary SystemState where
     regi <- readableAddress
     stk <- listOf $ pcWithStepMargin 1
     pc <- pcWithStepMargin 1
-    env <- arbitrary
     disp <- bitmapWithSize displaySize
     t <- getNonNegative <$> arbitrary
     rnds <- randoms <$> mkStdGen <$> arbitrary
     sndValue <- arbitrary
     dlyValue <- arbitrary
+    keyStates <- zip [0..0xF] <$> vector 16
 
-    let (Right state) = execSystem env initialSystemState $ do
+    let (Right state) = execSystem initialSystemState $ do
           writeMem userMemoryStart mem
           forM_ (zip [0..] reg) $ uncurry setReg
           setRegI regi
@@ -80,6 +85,7 @@ instance Arbitrary SystemState where
           blit disp (0, 0)
           when (isJust sndValue) (setSoundTimer $ fromJust sndValue)
           when (isJust dlyValue) (setDelayTimer $ fromJust dlyValue)
+          forM_ keyStates $ \(k, s) -> setKeyState k s
     return state
 
 -- Make 'Either' testable
@@ -91,7 +97,7 @@ instance (Testable prop, Show a) => Testable (Either a prop) where
 
 -- 'System' is tested through arbitrary states and environments.
 instance (Testable prop) => Testable (System prop) where
-  property action = property $ \env state -> evalSystem env state action
+  property action = property $ \state -> evalSystem state action
 
 -- |Newtype for generating valid addresses.
 newtype Address = Address { getAddress :: Word16 }
@@ -186,16 +192,16 @@ invalidRegisterIndex = arbitrary `suchThat` (>= numRegisters)
 
 -- |Checks whether the given action produces an error when run with the given state
 -- and 'Environment'.
-isError :: System a -> Environment -> SystemState -> Bool
-isError sys env state =
-  case evalSystem env state sys of
+isError :: System a -> SystemState -> Bool
+isError sys state =
+  case evalSystem state sys of
     Left _  -> True
     Right _ -> False
 
 -- |Checks whether the given action produces a state equal to the input state
 -- when run with the given 'Environment' and 'SystemState'.
-isNonMutating :: System a -> Environment -> SystemState -> Bool
-isNonMutating sys env state = Right state == execSystem env state sys
+isNonMutating :: System a -> SystemState -> Bool
+isNonMutating sys state = Right state == execSystem state sys
 
 spec :: Spec
 spec = do
@@ -227,9 +233,9 @@ spec = do
 
   describe "readMem" $ do
     prop "is equivalent to reading byte by byte" $
-      forAll readableArea $ \(addr, len) env state ->
-        let bulk = evalSystem env state (readMem addr len)
-            oneByOne = evalSystem env state $
+      forAll readableArea $ \(addr, len) state ->
+        let bulk = evalSystem state (readMem addr len)
+            oneByOne = evalSystem state $
                          Vector.fromList <$> forM [addr..(addr + len - 1)] getMem
         in bulk == oneByOne
 
@@ -237,8 +243,8 @@ spec = do
       forAll invalidArea $ \(addr, len) -> isError $ readMem addr len
 
     prop "read length is equal to requested length" $
-      forAll readableArea $ \(addr, len) env state ->
-        let (Right vec) = evalSystem env state (readMem addr len)
+      forAll readableArea $ \(addr, len) state ->
+        let (Right vec) = evalSystem state (readMem addr len)
         in Vector.length vec == fromIntegral len
 
     prop "does not mutate the state" $
@@ -246,12 +252,12 @@ spec = do
 
   describe "writeMem" $ do
     prop "is equivalient to writing byte by byte" $
-      forAll writableArea $ \(addr, len) env state ->
+      forAll writableArea $ \(addr, len) state ->
       forAll (dataVector $ fromIntegral len) $ \vec ->
-        let bulk = execSystem env state (writeMem addr vec)
+        let bulk = execSystem state (writeMem addr vec)
             list = Vector.toList vec
             setN i = setMem (addr +  i)
-            oneByOne = execSystem env state $ zipWithM_ setN [0..] list
+            oneByOne = execSystem state $ zipWithM_ setN [0..] list
         in bulk == oneByOne
 
     prop "leaves rest of state unchanged" $
@@ -353,7 +359,7 @@ spec = do
 
   describe "pop" $ do
     prop "pop fails on empty stack" $
-      \env -> isError pop env initialSystemState
+      isError pop initialSystemState
 
     prop "pop returns elements in the reverse order they were pushed" $
       \elems -> do mapM_ push elems
@@ -373,9 +379,9 @@ spec = do
 
   describe "clearDisplay" $
     prop "makes the screen black" $
-      \env state -> (display <$> execSystem env state clearDisplay)
-                    ==
-                    Right initialDisplay
+      \state -> (display <$> execSystem state clearDisplay)
+                ==
+                Right initialDisplay
 
   describe "setRandoms/nextRandom" $ do
     prop "returns the randoms set" $
@@ -429,3 +435,17 @@ spec = do
                 sleep 10
                 x1 <- getDelayTimer
                 return $ x1 == 0
+
+  describe "getKeyState/setKeyState" $ do
+    prop "sets/gets the specified key to the specified state" $
+      \(Key key) state -> do setKeyState key state
+                             state' <- getKeyState key
+                             return $ state' == state
+
+    prop "throws exception on set if key is > 0xF" $
+      forAll (choose (0x10, 0xFF)) $ \key state ->
+        isError $ setKeyState key state
+
+    prop "throws exception on get if key is > 0xF" $
+      forAll (choose (0x10, 0xFF)) $ \key ->
+        isError $ getKeyState key

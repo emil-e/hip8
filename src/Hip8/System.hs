@@ -7,7 +7,6 @@ The System monad
 -}
 
 module Hip8.System (
-  Environment(..),
   SystemState,
   register,
   stack,
@@ -27,7 +26,6 @@ module Hip8.System (
   runSystem,
   evalSystem,
   execSystem,
-  getEnvironment,
   getSystemState,
   systemException,
 
@@ -57,7 +55,9 @@ module Hip8.System (
   setSoundTimer,
   getSoundTimer,
   setDelayTimer,
-  getDelayTimer
+  getDelayTimer,
+  getKeyState,
+  setKeyState
   ) where
 
 import Hip8.Bitmap (Bitmap)
@@ -70,11 +70,6 @@ import qualified Data.Vector.Unboxed.Mutable as MVector
 import Data.Word
 import Control.Monad
 import Text.Printf
-
--- |Describes the input to the emulated system consisting of the current time
--- and the currently pressed key.
-data Environment = Environment (Maybe Word8)
-                 deriving (Eq, Show)
 
 -- |Describes a value set at a particular time for the sound timer or delay timer.
 data TimerSetting = NotSet | Set Double Word8
@@ -109,7 +104,9 @@ data SystemState = SystemState {
   -- |The display buffer.
   _display :: Bitmap,
   -- |A list of random numbers which acts as the random source of the system.
-  _randoms :: Infinite Word8
+  _randoms :: Infinite Word8,
+  -- |Key states.
+  _keys :: Vector Bool
   } deriving (Show)
 
 instance Eq SystemState where
@@ -121,7 +118,8 @@ instance Eq SystemState where
              (_time s1 == _time s2) &&
              (_delayTimerSetting s1 == _delayTimerSetting s2) &&
              (_soundTimerSetting s1 == _soundTimerSetting s2) &&
-             (_display s1 == _display s2)
+             (_display s1 == _display s2) &&
+             (_keys s1 == _keys s2)
 
 charSprites :: Vector Word8
 charSprites = Vector.fromList $ [
@@ -161,7 +159,7 @@ register st index
 stack :: SystemState -> [Word16]
 stack = _stack
 
--- |Returns the program count of the given 'SystemState'.
+-- |Returns the program counter of the given 'SystemState'.
 programCounter :: SystemState -> Word16
 programCounter = _programCounter
 
@@ -216,7 +214,8 @@ initialSystemState = SystemState {
   _delayTimerSetting = NotSet,
   _soundTimerSetting = NotSet,
   _display = initialDisplay,
-  _randoms = Infinite $ repeat 0
+  _randoms = Infinite $ repeat 0,
+  _keys = Vector.replicate 16 False
   }
 
 -- |The Chip-8 standard display dimensions.
@@ -232,49 +231,36 @@ data SystemException = SystemException String
                      deriving (Show, Eq)
 
 -- |The system monad for performing operations on a 'SystemState'.
-newtype System a = System (StateT (Environment, SystemState) (Either SystemException) a)
+newtype System a = System (StateT SystemState (Either SystemException) a)
                  deriving (Functor, Applicative, Monad)
 
 -- |Given an 'Environment' and an initial 'SystemState', runs the given 'System' monad returning
 -- either a tuple of the value and the transformed state or a 'SystemException' describing an
 -- error.
-runSystem :: Environment
-          -> SystemState
+runSystem :: SystemState
           -> System a
           -> Either SystemException (a, SystemState)
-runSystem env s (System sys) =
-  case ret of
-    Right (x, (_, s')) -> Right (x, s')
-    Left err -> Left err
-  where ret = runStateT sys (env, s)
+runSystem s (System sys) = runStateT sys s
 
 -- |Like 'runSystem' but only returns the value.
-evalSystem :: Environment
-           -> SystemState
+evalSystem :: SystemState
            -> System a
            -> Either SystemException a
-evalSystem env s sys = fst <$> runSystem env s sys
+evalSystem s sys = fst <$> runSystem s sys
 
 -- |Like 'runSystem' but only returns the transformed state.
-execSystem :: Environment
-           -> SystemState
+execSystem :: SystemState
            -> System a
            -> Either SystemException SystemState
-execSystem env s sys = snd <$> runSystem env s sys
-
--- |Returns the current 'Environment'.
-getEnvironment :: System Environment
-getEnvironment = System $ fst <$> get
+execSystem s sys = snd <$> runSystem s sys
 
 -- |Returns the current 'SystemState'.
 getSystemState :: System SystemState
-getSystemState = System $ snd <$> get
+getSystemState = System $ get
 
 -- |Sets the current 'SystemState'.
 putSystemState :: SystemState -> System ()
-putSystemState s = do
-  (env, _) <- System get
-  System $ put (env, s)
+putSystemState s = System $ put s
 
 -- |Applies the given function to the current state.
 modifySystemState :: (SystemState -> SystemState) -> System ()
@@ -450,3 +436,17 @@ setDelayTimer value = modifySystemState $ \st ->
 -- |Returns the current value of the delay timer.
 getDelayTimer :: System Word8
 getDelayTimer = delayTimer <$> getSystemState
+
+-- |Returns the state of the given key.
+getKeyState :: Word8 -> System Bool
+getKeyState key
+  | key > 0xF = systemException $ printf "Invalid key 0x%x" key
+  | otherwise = do keys <- _keys <$> getSystemState
+                   return $ keys ! fromIntegral key
+
+-- |Sets the state of the given key.
+setKeyState :: Word8 -> Bool -> System ()
+setKeyState key pressed
+  | key > 0xF = systemException $ printf "Invalid key 0x%x" key
+  | otherwise = modifySystemState $ \st -> st {
+      _keys = Vector.unsafeUpd (_keys st) [(fromIntegral key, pressed)] }
