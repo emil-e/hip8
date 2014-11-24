@@ -54,6 +54,7 @@ import Control.Applicative
 import Data.Word
 import Control.Monad
 import Data.Bits
+import Data.List
 import Text.Printf
 import qualified Data.Vector.Unboxed as Vector
 
@@ -69,11 +70,28 @@ data PseudoArg = Addr Word16
                | SpriteLoc
                | BCD
                | Key
-               deriving (Show, Eq)
+               deriving (Eq)
+
+instance Show PseudoArg where
+  show (Addr x) = printf "0x%X" x
+  show (Byte x) = printf "0x%X" x
+  show (Nibble x) = show x
+  show (Reg x) = show x
+  show RegI = "I"
+  show AddrI = "*I"
+  show DelayTimer = "DT"
+  show SoundTimer = "ST"
+  show SpriteLoc = "F"
+  show BCD = "B"
+  show Key = "Key"
 
 -- |Information about an instruction.
 data InstructionInfo = InstructionInfo String [PseudoArg]
-                     deriving (Show, Eq)
+                     deriving (Eq)
+
+instance Show InstructionInfo where
+  show (InstructionInfo name args) = name ++ " " ++ argString
+    where argString = intercalate ", " (show <$> args)
 
 -- |An instruction with a describing string and a 'System' action which performs
 -- the operation described by the info.
