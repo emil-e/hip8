@@ -166,7 +166,7 @@ sys addr = Instruction (InstructionInfo "SYS" [Addr addr]) exec
 
 cls :: Instruction
 cls = Instruction (InstructionInfo "CLS" []) exec
-  where exec = clearDisplay
+  where exec = clearDisplay >> stepPC
 
 ret :: Instruction
 ret = Instruction (InstructionInfo "RET" []) exec

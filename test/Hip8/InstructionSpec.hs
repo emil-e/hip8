@@ -128,11 +128,14 @@ spec = do
     prop "always fails" $
       \addr -> isError $ execInstruction $ sys addr
 
-  describe "cls" $
+  describe "cls" $ do
     prop "clears the screen" $
       \state -> (display <$> execSystem state (execInstruction cls))
                 ==
                 Right initialDisplay
+
+    prop "steps PC by one" $
+      stepsPCBy 1 $ execInstruction cls
 
   describe "ret" $ do
     prop "sets the PC to the top of the stack plus one step" $
