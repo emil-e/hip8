@@ -76,7 +76,7 @@ instance Show PseudoArg where
   show (Addr x) = printf "0x%X" x
   show (Byte x) = printf "0x%X" x
   show (Nibble x) = show x
-  show (Reg x) = show x
+  show (Reg x) = "V" ++ show x
   show RegI = "I"
   show AddrI = "*I"
   show DelayTimer = "DT"
